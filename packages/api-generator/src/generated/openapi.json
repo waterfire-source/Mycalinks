@@ -1,0 +1,3504 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MycaPOS API",
+    "description": "MycaPOSプロジェクトで使うREST APIの定義 ※まだ5%くらいしかOpenAPI化できてないです",
+    "contact": {
+      "name": "齊田"
+    },
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3020/api",
+      "description": "dev server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "item",
+      "description": "商品マスタ関連のAPI"
+    }
+  ],
+  "components": {
+    "schemas": {},
+    "parameters": {}
+  },
+  "paths": {
+    "/store/{store_id}/item/genre": {
+      "post": {
+        "summary": "ジャンル作成",
+        "description": "商品マスタのジャンルを作成する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "createItemGenre",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "store_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "myca_genre_id": {
+                    "type": "number",
+                    "description": "Mycaのジャンルから追加する場合、そのIDを指定する"
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "description": "ジャンル名"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "store_id": {
+                      "type": "integer"
+                    },
+                    "display_name": {
+                      "type": "string",
+                      "description": "ジャンル名"
+                    },
+                    "handle": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "auto_update": {
+                      "type": "boolean"
+                    },
+                    "hidden": {
+                      "type": "boolean"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "store_id",
+                    "display_name",
+                    "handle",
+                    "description",
+                    "auto_update",
+                    "hidden",
+                    "deleted",
+                    "created_at",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "エラーレスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "すでに存在するMycaジャンルです"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "エラーレスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "存在しないMycaジャンルを指定しています"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "ジャンル取得",
+        "description": "商品マスタのジャンルを取得する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "getItemGenre",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "store_id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "boolean",
+              "description": "在庫検索タブレットからかどうか"
+            },
+            "required": false,
+            "description": "在庫検索タブレットからかどうか",
+            "name": "fromTablet",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "itemGenres": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "store_id": {
+                            "type": "integer"
+                          },
+                          "display_name": {
+                            "type": "string",
+                            "description": "ジャンル名"
+                          },
+                          "handle": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "auto_update": {
+                            "type": "boolean"
+                          },
+                          "hidden": {
+                            "type": "boolean"
+                          },
+                          "deleted": {
+                            "type": "boolean"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "store_id",
+                          "display_name",
+                          "handle",
+                          "description",
+                          "auto_update",
+                          "hidden",
+                          "deleted",
+                          "created_at",
+                          "updated_at"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "itemGenres"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{store_id}/item/bundle": {
+      "post": {
+        "summary": "バンドル作成",
+        "description": "バンドル商品マスタを作成する。同時に在庫数も調整する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "createBundle",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "store_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "description": "編集を行うときに必要なID"
+                  },
+                  "sell_price": {
+                    "type": "integer"
+                  },
+                  "init_stock_number": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "expire_at": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "start_at": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "genre_id": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "image_url": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "products": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "product_id": {
+                          "type": "integer"
+                        },
+                        "item_count": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "product_id",
+                        "item_count"
+                      ]
+                    },
+                    "description": "商品定義"
+                  }
+                },
+                "required": [
+                  "sell_price",
+                  "init_stock_number",
+                  "display_name",
+                  "products"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "PUBLISH",
+                        "HIDDEN",
+                        "DELETED"
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "NORMAL",
+                        "ORIGINAL_PACK",
+                        "BUNDLE"
+                      ]
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "store_id": {
+                      "type": "integer"
+                    },
+                    "display_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "display_name_ruby": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "sell_price": {
+                      "type": "integer"
+                    },
+                    "buy_price": {
+                      "type": "integer"
+                    },
+                    "category_id": {
+                      "type": "integer"
+                    },
+                    "genre_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "group_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "jan_code_as_product_code": {
+                      "type": "boolean"
+                    },
+                    "readonly_product_code": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "is_buy_only": {
+                      "type": "boolean"
+                    },
+                    "allow_auto_print_label": {
+                      "type": "boolean"
+                    },
+                    "allow_round": {
+                      "type": "boolean"
+                    },
+                    "rarity": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "pack_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expansion": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cardnumber": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "keyword": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cardseries": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "card_type": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option1": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option2": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option3": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option4": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "option5": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option6": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "オプション6"
+                    },
+                    "release_date": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "displaytype1": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "displaytype2": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "weight": {
+                      "type": "integer"
+                    },
+                    "market_price_updated_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "market_price": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "previous_market_price": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "market_price_gap_rate": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "order_number": {
+                      "type": "integer"
+                    },
+                    "products_stock_number": {
+                      "type": "integer"
+                    },
+                    "infinite_stock": {
+                      "type": "boolean"
+                    },
+                    "init_stock_number": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "expire_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "start_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "tablet_allowed": {
+                      "type": "boolean"
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "myca_item_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "myca_pack_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "image_url": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "jan_code": {
+                      "type": "string",
+                      "nullable": true,
+                      "pattern": "^d+$"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "department_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "hidden_products": {
+                      "type": "boolean"
+                    },
+                    "bundle_item_products": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "item_id": {
+                            "type": "integer"
+                          },
+                          "product_id": {
+                            "type": "integer"
+                          },
+                          "item_count": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "item_id",
+                          "product_id",
+                          "item_count"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "type",
+                    "id",
+                    "store_id",
+                    "display_name",
+                    "display_name_ruby",
+                    "sell_price",
+                    "buy_price",
+                    "category_id",
+                    "genre_id",
+                    "group_id",
+                    "jan_code_as_product_code",
+                    "readonly_product_code",
+                    "is_buy_only",
+                    "allow_auto_print_label",
+                    "allow_round",
+                    "rarity",
+                    "pack_name",
+                    "expansion",
+                    "cardnumber",
+                    "keyword",
+                    "cardseries",
+                    "card_type",
+                    "option1",
+                    "option2",
+                    "option3",
+                    "option4",
+                    "option5",
+                    "option6",
+                    "release_date",
+                    "displaytype1",
+                    "displaytype2",
+                    "weight",
+                    "market_price_updated_at",
+                    "market_price",
+                    "previous_market_price",
+                    "market_price_gap_rate",
+                    "order_number",
+                    "products_stock_number",
+                    "infinite_stock",
+                    "init_stock_number",
+                    "expire_at",
+                    "start_at",
+                    "tablet_allowed",
+                    "description",
+                    "myca_item_id",
+                    "myca_pack_id",
+                    "image_url",
+                    "created_at",
+                    "updated_at",
+                    "jan_code",
+                    "deleted",
+                    "department_id",
+                    "hidden_products",
+                    "bundle_item_products"
+                  ],
+                  "description": "作成できたバンドル商品マスタの情報"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{store_id}/item/transaction": {
+      "get": {
+        "summary": "商品マスタベース取引取得",
+        "description": "商品マスタベースで取引情報を取得する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "listItemWithTransaction",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "store_id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "取引終了日時の開始時間指定"
+            },
+            "required": false,
+            "description": "取引終了日時の開始時間指定",
+            "name": "transactionFinishedAtGte",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "取引終了日時の終了時間指定"
+            },
+            "required": false,
+            "description": "取引終了日時の終了時間指定",
+            "name": "transactionFinishedAtLt",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "boolean",
+              "description": "内訳の取引情報まで取得するかどうか"
+            },
+            "required": false,
+            "description": "内訳の取引情報まで取得するかどうか",
+            "name": "includesTransactions",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "boolean",
+              "description": "合計件数まで取得するかどうか"
+            },
+            "required": false,
+            "description": "合計件数まで取得するかどうか",
+            "name": "includesSummary",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "sell",
+                "buy"
+              ]
+            },
+            "required": false,
+            "name": "transaction_kind",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": false,
+            "name": "item_id",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "required": false,
+            "name": "display_name",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": false,
+            "name": "category_id",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true
+            },
+            "required": false,
+            "name": "genre_id",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "required": false,
+            "name": "rarity",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "nullable": true
+            },
+            "required": false,
+            "name": "cardnumber",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "productsTagName",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": false,
+            "name": "customer_id",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "ソートの定義\ntransactionCount: 取引件数 昇降順\ntransactionProductsCount: 取引点数 昇降順\ntransactionTotalPrice: 取引総額 昇降順\n"
+            },
+            "required": false,
+            "description": "ソートの定義\ntransactionCount: 取引件数 昇降順\ntransactionProductsCount: 取引点数 昇降順\ntransactionTotalPrice: 取引総額 昇降順\n",
+            "name": "orderBy",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 1000,
+              "description": "取得する数"
+            },
+            "required": false,
+            "description": "取得する数",
+            "name": "take",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "description": "飛ばす数"
+            },
+            "required": false,
+            "description": "飛ばす数",
+            "name": "skip",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "item": {
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "DRAFT",
+                                  "PUBLISH",
+                                  "HIDDEN",
+                                  "DELETED"
+                                ]
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "NORMAL",
+                                  "ORIGINAL_PACK",
+                                  "BUNDLE"
+                                ]
+                              },
+                              "id": {
+                                "type": "integer"
+                              },
+                              "store_id": {
+                                "type": "integer"
+                              },
+                              "display_name": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "display_name_ruby": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "sell_price": {
+                                "type": "integer"
+                              },
+                              "buy_price": {
+                                "type": "integer"
+                              },
+                              "category_id": {
+                                "type": "integer"
+                              },
+                              "genre_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "group_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "jan_code_as_product_code": {
+                                "type": "boolean"
+                              },
+                              "readonly_product_code": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "is_buy_only": {
+                                "type": "boolean"
+                              },
+                              "allow_auto_print_label": {
+                                "type": "boolean"
+                              },
+                              "allow_round": {
+                                "type": "boolean"
+                              },
+                              "rarity": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "pack_name": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "expansion": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "cardnumber": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "keyword": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "cardseries": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "card_type": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "option1": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "option2": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "option3": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "option4": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "option5": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "option6": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "オプション6"
+                              },
+                              "release_date": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "displaytype1": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "displaytype2": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "weight": {
+                                "type": "integer"
+                              },
+                              "market_price_updated_at": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "market_price": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "previous_market_price": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "market_price_gap_rate": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "order_number": {
+                                "type": "integer"
+                              },
+                              "products_stock_number": {
+                                "type": "integer"
+                              },
+                              "infinite_stock": {
+                                "type": "boolean"
+                              },
+                              "init_stock_number": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "expire_at": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "start_at": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "tablet_allowed": {
+                                "type": "boolean"
+                              },
+                              "description": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "myca_item_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "myca_pack_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "image_url": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "created_at": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "updated_at": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "jan_code": {
+                                "type": "string",
+                                "nullable": true,
+                                "pattern": "^d+$"
+                              },
+                              "deleted": {
+                                "type": "boolean"
+                              },
+                              "department_id": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "hidden_products": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "type",
+                              "id",
+                              "store_id",
+                              "display_name",
+                              "display_name_ruby",
+                              "sell_price",
+                              "buy_price",
+                              "category_id",
+                              "genre_id",
+                              "group_id",
+                              "jan_code_as_product_code",
+                              "readonly_product_code",
+                              "is_buy_only",
+                              "allow_auto_print_label",
+                              "allow_round",
+                              "rarity",
+                              "pack_name",
+                              "expansion",
+                              "cardnumber",
+                              "keyword",
+                              "cardseries",
+                              "card_type",
+                              "option1",
+                              "option2",
+                              "option3",
+                              "option4",
+                              "option5",
+                              "option6",
+                              "release_date",
+                              "displaytype1",
+                              "displaytype2",
+                              "weight",
+                              "market_price_updated_at",
+                              "market_price",
+                              "previous_market_price",
+                              "market_price_gap_rate",
+                              "order_number",
+                              "products_stock_number",
+                              "infinite_stock",
+                              "init_stock_number",
+                              "expire_at",
+                              "start_at",
+                              "tablet_allowed",
+                              "description",
+                              "myca_item_id",
+                              "myca_pack_id",
+                              "image_url",
+                              "created_at",
+                              "updated_at",
+                              "jan_code",
+                              "deleted",
+                              "department_id",
+                              "hidden_products"
+                            ]
+                          },
+                          "item_id": {
+                            "type": "integer"
+                          },
+                          "transaction_kind": {
+                            "type": "string",
+                            "enum": [
+                              "sell",
+                              "buy"
+                            ]
+                          },
+                          "transactionStats": {
+                            "type": "object",
+                            "properties": {
+                              "transactionCount": {
+                                "type": "number",
+                                "description": "取引件数"
+                              },
+                              "transactionProductsCount": {
+                                "type": "number",
+                                "description": "取引点数"
+                              },
+                              "transactionTotalPrice": {
+                                "type": "number",
+                                "description": "取引総額"
+                              }
+                            },
+                            "required": [
+                              "transactionCount",
+                              "transactionProductsCount",
+                              "transactionTotalPrice"
+                            ]
+                          },
+                          "transactions": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "transaction": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "finished_at": {
+                                      "type": "string",
+                                      "nullable": true
+                                    },
+                                    "payment_method": {
+                                      "type": "string",
+                                      "nullable": true,
+                                      "enum": [
+                                        "cash",
+                                        "bank",
+                                        "square",
+                                        "paypay",
+                                        "felica"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "finished_at",
+                                    "payment_method"
+                                  ]
+                                },
+                                "item_count": {
+                                  "type": "integer"
+                                },
+                                "total_unit_price": {
+                                  "type": "integer"
+                                },
+                                "total_discount_price": {
+                                  "type": "integer"
+                                },
+                                "product": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "integer"
+                                    },
+                                    "condition_option": {
+                                      "type": "object",
+                                      "nullable": true,
+                                      "properties": {
+                                        "id": {
+                                          "type": "integer"
+                                        },
+                                        "display_name": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "display_name"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "condition_option"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "transaction",
+                                "item_count",
+                                "total_unit_price",
+                                "total_discount_price",
+                                "product"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "item",
+                          "item_id",
+                          "transaction_kind",
+                          "transactionStats"
+                        ]
+                      }
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "totalCount": {
+                          "type": "number",
+                          "description": "合計件数"
+                        },
+                        "totalSellPrice": {
+                          "type": "number",
+                          "description": "合計販売価格"
+                        },
+                        "totalBuyPrice": {
+                          "type": "number",
+                          "description": "合計買取価格"
+                        }
+                      },
+                      "required": [
+                        "totalCount",
+                        "totalSellPrice",
+                        "totalBuyPrice"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{store_id}/item/original-pack": {
+      "post": {
+        "summary": "オリパ作成",
+        "description": "オリパを作成する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "createOriginalPack",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "store_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "description": "編集を行うときに必要なID"
+                  },
+                  "asDraft": {
+                    "type": "boolean",
+                    "description": "下書きとして作成するかどうか"
+                  },
+                  "staff_account_id": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "description": "担当者ID",
+                    "deprecated": true
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "sell_price": {
+                    "type": "integer"
+                  },
+                  "init_stock_number": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "image_url": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "genre_id": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "category_id": {
+                    "type": "integer"
+                  },
+                  "products": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "product_id": {
+                          "type": "integer"
+                        },
+                        "staff_account_id": {
+                          "type": "integer"
+                        },
+                        "item_count": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "product_id",
+                        "staff_account_id",
+                        "item_count"
+                      ]
+                    }
+                  },
+                  "additional_products": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "product_id": {
+                          "type": "integer"
+                        },
+                        "item_count": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "product_id",
+                        "item_count"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "PUBLISH",
+                        "HIDDEN",
+                        "DELETED"
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "NORMAL",
+                        "ORIGINAL_PACK",
+                        "BUNDLE"
+                      ]
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "store_id": {
+                      "type": "integer"
+                    },
+                    "display_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "display_name_ruby": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "sell_price": {
+                      "type": "integer"
+                    },
+                    "buy_price": {
+                      "type": "integer"
+                    },
+                    "category_id": {
+                      "type": "integer"
+                    },
+                    "genre_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "group_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "jan_code_as_product_code": {
+                      "type": "boolean"
+                    },
+                    "readonly_product_code": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "is_buy_only": {
+                      "type": "boolean"
+                    },
+                    "allow_auto_print_label": {
+                      "type": "boolean"
+                    },
+                    "allow_round": {
+                      "type": "boolean"
+                    },
+                    "rarity": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "pack_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expansion": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cardnumber": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "keyword": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cardseries": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "card_type": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option1": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option2": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option3": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option4": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "option5": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option6": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "オプション6"
+                    },
+                    "release_date": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "displaytype1": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "displaytype2": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "weight": {
+                      "type": "integer"
+                    },
+                    "market_price_updated_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "market_price": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "previous_market_price": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "market_price_gap_rate": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "order_number": {
+                      "type": "integer"
+                    },
+                    "products_stock_number": {
+                      "type": "integer"
+                    },
+                    "infinite_stock": {
+                      "type": "boolean"
+                    },
+                    "init_stock_number": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "expire_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "start_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "tablet_allowed": {
+                      "type": "boolean"
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "myca_item_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "myca_pack_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "image_url": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "jan_code": {
+                      "type": "string",
+                      "nullable": true,
+                      "pattern": "^d+$"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "department_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "hidden_products": {
+                      "type": "boolean"
+                    },
+                    "original_pack_products": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "item_id": {
+                            "type": "integer"
+                          },
+                          "product_id": {
+                            "type": "integer"
+                          },
+                          "item_count": {
+                            "type": "integer"
+                          },
+                          "staff_account_id": {
+                            "type": "integer"
+                          },
+                          "process_id": {
+                            "type": "string"
+                          },
+                          "wholesale_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "staff_account": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "description": "アカウントID"
+                              },
+                              "display_name": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "アカウント名"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "display_name"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "item_id",
+                          "product_id",
+                          "item_count",
+                          "staff_account_id",
+                          "process_id",
+                          "wholesale_price",
+                          "staff_account"
+                        ]
+                      }
+                    },
+                    "products": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "BUNDLE",
+                              "ORIGINAL_PACK",
+                              "NORMAL"
+                            ]
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "store_id": {
+                            "type": "integer"
+                          },
+                          "item_id": {
+                            "type": "integer"
+                          },
+                          "is_buy_only": {
+                            "type": "boolean"
+                          },
+                          "specific_sell_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "specific_buy_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "retail_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "sell_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "buy_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "ec_sell_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "specific_ec_sell_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "actual_ec_sell_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "stock_number": {
+                            "type": "integer"
+                          },
+                          "pos_reserved_stock_number": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "mycalinks_ec_enabled": {
+                            "type": "boolean"
+                          },
+                          "ec_stock_number": {
+                            "type": "integer"
+                          },
+                          "disable_ec_auto_stocking": {
+                            "type": "boolean"
+                          },
+                          "is_active": {
+                            "type": "boolean"
+                          },
+                          "arrow_auto_price_adjustment": {
+                            "type": "boolean"
+                          },
+                          "force_no_price_label": {
+                            "type": "boolean"
+                          },
+                          "specific_auto_sell_price_adjustment": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "is_special_price_product": {
+                            "type": "boolean"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          },
+                          "display_name_ruby": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "keyword": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "image_url": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "product_code": {
+                            "type": "string",
+                            "nullable": true,
+                            "pattern": "^d+$"
+                          },
+                          "readonly_product_code": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "allowed_point": {
+                            "type": "boolean"
+                          },
+                          "tablet_allowed": {
+                            "type": "boolean"
+                          },
+                          "average_wholesale_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "minimum_wholesale_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "maximum_wholesale_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "condition_option_id": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "deleted": {
+                            "type": "boolean"
+                          },
+                          "actual_sell_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "actual_buy_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "sell_price_updated_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "buy_price_updated_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "wholesale_price": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id",
+                          "store_id",
+                          "item_id",
+                          "is_buy_only",
+                          "specific_sell_price",
+                          "specific_buy_price",
+                          "retail_price",
+                          "sell_price",
+                          "buy_price",
+                          "ec_sell_price",
+                          "specific_ec_sell_price",
+                          "actual_ec_sell_price",
+                          "stock_number",
+                          "pos_reserved_stock_number",
+                          "mycalinks_ec_enabled",
+                          "ec_stock_number",
+                          "disable_ec_auto_stocking",
+                          "is_active",
+                          "arrow_auto_price_adjustment",
+                          "force_no_price_label",
+                          "specific_auto_sell_price_adjustment",
+                          "is_special_price_product",
+                          "display_name",
+                          "display_name_ruby",
+                          "keyword",
+                          "image_url",
+                          "product_code",
+                          "readonly_product_code",
+                          "description",
+                          "allowed_point",
+                          "tablet_allowed",
+                          "average_wholesale_price",
+                          "minimum_wholesale_price",
+                          "maximum_wholesale_price",
+                          "condition_option_id",
+                          "deleted",
+                          "actual_sell_price",
+                          "actual_buy_price",
+                          "sell_price_updated_at",
+                          "buy_price_updated_at",
+                          "created_at",
+                          "updated_at",
+                          "wholesale_price"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "type",
+                    "id",
+                    "store_id",
+                    "display_name",
+                    "display_name_ruby",
+                    "sell_price",
+                    "buy_price",
+                    "category_id",
+                    "genre_id",
+                    "group_id",
+                    "jan_code_as_product_code",
+                    "readonly_product_code",
+                    "is_buy_only",
+                    "allow_auto_print_label",
+                    "allow_round",
+                    "rarity",
+                    "pack_name",
+                    "expansion",
+                    "cardnumber",
+                    "keyword",
+                    "cardseries",
+                    "card_type",
+                    "option1",
+                    "option2",
+                    "option3",
+                    "option4",
+                    "option5",
+                    "option6",
+                    "release_date",
+                    "displaytype1",
+                    "displaytype2",
+                    "weight",
+                    "market_price_updated_at",
+                    "market_price",
+                    "previous_market_price",
+                    "market_price_gap_rate",
+                    "order_number",
+                    "products_stock_number",
+                    "infinite_stock",
+                    "init_stock_number",
+                    "expire_at",
+                    "start_at",
+                    "tablet_allowed",
+                    "description",
+                    "myca_item_id",
+                    "myca_pack_id",
+                    "image_url",
+                    "created_at",
+                    "updated_at",
+                    "jan_code",
+                    "deleted",
+                    "department_id",
+                    "hidden_products",
+                    "original_pack_products"
+                  ],
+                  "description": "作成できたオリパの情報"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "エラーレスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "to_productsとadditional_productsを同時に指定することはできません ｜ 新規登録時にadditional_productsは指定できません ｜ オリパ・福袋登録では指定できない部門です ｜ オリパの作成を完了させるためにはinit_stock_nunmberとsell_priceの登録が必要です ｜ オリパの登録を完了させるためには担当者のIDを指定する必要があります"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "エラーレスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "正常に在庫が作成されませんでした"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{store_id}/item/category": {
+      "get": {
+        "summary": "カテゴリ取得",
+        "description": "商品マスタのカテゴリを取得する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "getItemCategory",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "store_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "itemCategories": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "handle": {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              "CARD",
+                              "BOX",
+                              "ORIGINAL_PACK",
+                              "LUCKY_BAG",
+                              "BUNDLE",
+                              "STORAGE",
+                              "PURCHASE_GUARANTEE",
+                              "OTHER"
+                            ]
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          },
+                          "store_id": {
+                            "type": "integer"
+                          },
+                          "hidden": {
+                            "type": "boolean"
+                          },
+                          "deleted": {
+                            "type": "boolean"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "condition_options": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "handle": {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    "O1_S",
+                                    "O2_A",
+                                    "O3_A_MINUS",
+                                    "O4_B",
+                                    "O5_C",
+                                    "O6_D",
+                                    "O1_BRAND_NEW",
+                                    "O2_LIKE_NEW",
+                                    "O3_USED"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "integer"
+                                },
+                                "item_category_id": {
+                                  "type": "integer"
+                                },
+                                "display_name": {
+                                  "type": "string"
+                                },
+                                "tablet_allowed": {
+                                  "type": "boolean"
+                                },
+                                "deleted": {
+                                  "type": "boolean"
+                                },
+                                "description": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "_count": {
+                                  "type": "object",
+                                  "properties": {
+                                    "products": {
+                                      "type": "number",
+                                      "description": "この選択肢に紐づいている在庫数"
+                                    }
+                                  },
+                                  "required": [
+                                    "products"
+                                  ]
+                                },
+                                "rate_variants": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "auto_sell_price_adjustment_round_rule": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "enum": [
+                                          "up",
+                                          "down",
+                                          "round"
+                                        ]
+                                      },
+                                      "auto_buy_price_adjustment_round_rule": {
+                                        "type": "string",
+                                        "nullable": true,
+                                        "enum": [
+                                          "up",
+                                          "down",
+                                          "round"
+                                        ]
+                                      },
+                                      "id": {
+                                        "type": "integer"
+                                      },
+                                      "option_id": {
+                                        "type": "integer"
+                                      },
+                                      "group_id": {
+                                        "type": "integer",
+                                        "nullable": true
+                                      },
+                                      "genre_id": {
+                                        "type": "integer",
+                                        "nullable": true
+                                      },
+                                      "auto_sell_price_adjustment": {
+                                        "type": "string"
+                                      },
+                                      "auto_buy_price_adjustment": {
+                                        "type": "string"
+                                      },
+                                      "auto_sell_price_adjustment_round_rank": {
+                                        "type": "integer",
+                                        "nullable": true
+                                      },
+                                      "auto_buy_price_adjustment_round_rank": {
+                                        "type": "integer",
+                                        "nullable": true
+                                      }
+                                    },
+                                    "required": [
+                                      "auto_sell_price_adjustment_round_rule",
+                                      "auto_buy_price_adjustment_round_rule",
+                                      "id",
+                                      "option_id",
+                                      "group_id",
+                                      "genre_id",
+                                      "auto_sell_price_adjustment",
+                                      "auto_buy_price_adjustment",
+                                      "auto_sell_price_adjustment_round_rank",
+                                      "auto_buy_price_adjustment_round_rank"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": [
+                                "handle",
+                                "id",
+                                "item_category_id",
+                                "display_name",
+                                "tablet_allowed",
+                                "deleted",
+                                "description",
+                                "_count",
+                                "rate_variants"
+                              ]
+                            }
+                          },
+                          "groups": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer"
+                                },
+                                "item_category_id": {
+                                  "type": "integer"
+                                },
+                                "display_name": {
+                                  "type": "string"
+                                },
+                                "description": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "created_at": {
+                                  "type": "string",
+                                  "nullable": true
+                                },
+                                "updated_at": {
+                                  "type": "string",
+                                  "nullable": true
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "item_category_id",
+                                "display_name",
+                                "description",
+                                "created_at",
+                                "updated_at"
+                              ]
+                            },
+                            "description": "商品マスタグループ（高額など）"
+                          }
+                        },
+                        "required": [
+                          "handle",
+                          "id",
+                          "display_name",
+                          "store_id",
+                          "hidden",
+                          "deleted",
+                          "created_at",
+                          "updated_at",
+                          "condition_options",
+                          "groups"
+                        ],
+                        "description": "カテゴリ自体の情報"
+                      }
+                    }
+                  },
+                  "required": [
+                    "itemCategories"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "カテゴリ作成・更新",
+        "description": "商品マスタのカテゴリを作成・更新する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "createOrUpdateItemCategory",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "store_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "description": "編集を行うときに必要なID"
+                  },
+                  "display_name": {
+                    "type": "string"
+                  },
+                  "hidden": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "handle": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "CARD",
+                        "BOX",
+                        "ORIGINAL_PACK",
+                        "LUCKY_BAG",
+                        "BUNDLE",
+                        "STORAGE",
+                        "PURCHASE_GUARANTEE",
+                        "OTHER"
+                      ]
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "display_name": {
+                      "type": "string"
+                    },
+                    "store_id": {
+                      "type": "integer"
+                    },
+                    "hidden": {
+                      "type": "boolean"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "handle",
+                    "id",
+                    "display_name",
+                    "store_id",
+                    "hidden",
+                    "deleted",
+                    "created_at",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{store_id}/item/genre/{item_genre_id}": {
+      "put": {
+        "summary": "ジャンル更新",
+        "description": "商品マスタのジャンルを更新する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "updateItemGenre",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "store_id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "item_genre_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "display_name": {
+                    "type": "string",
+                    "description": "ジャンル名"
+                  },
+                  "hidden": {
+                    "type": "boolean"
+                  },
+                  "auto_update": {
+                    "type": "boolean"
+                  },
+                  "deleted": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "store_id": {
+                      "type": "integer"
+                    },
+                    "display_name": {
+                      "type": "string",
+                      "description": "ジャンル名"
+                    },
+                    "handle": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "auto_update": {
+                      "type": "boolean"
+                    },
+                    "hidden": {
+                      "type": "boolean"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "store_id",
+                    "display_name",
+                    "handle",
+                    "description",
+                    "auto_update",
+                    "hidden",
+                    "deleted",
+                    "created_at",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "エラーレスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "自動生成部門は削除できません ｜ 自動生成部門以外は自動更新設定ができません"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/all/item/market-price/update-history": {
+      "get": {
+        "summary": "相場価格の更新履歴取得",
+        "description": "商品マスタの相場価格の更新履歴を取得する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "getItemMarketPriceHistory",
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updatedHistory": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "number"
+                          },
+                          "uploaded_at": {
+                            "type": "string",
+                            "description": "アップロード日時"
+                          },
+                          "data_count": {
+                            "type": "number",
+                            "description": "アップロードデータ数"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "uploaded_at",
+                          "data_count"
+                        ]
+                      },
+                      "description": "最新のものが最大10件取得される"
+                    }
+                  },
+                  "required": [
+                    "updatedHistory"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{store_id}/item/{item_id}/add-original-pack": {
+      "post": {
+        "summary": "オリパ補充",
+        "description": "オリパを補充する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "addOriginalPack",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "store_id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "item_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "additionalStockNumber": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "description": "追加する在庫数"
+                  },
+                  "additionalProducts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "product_id": {
+                          "type": "integer"
+                        },
+                        "item_count": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "product_id",
+                        "item_count"
+                      ]
+                    },
+                    "description": "追加する商品"
+                  }
+                },
+                "required": [
+                  "additionalStockNumber",
+                  "additionalProducts"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "DRAFT",
+                        "PUBLISH",
+                        "HIDDEN",
+                        "DELETED"
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "NORMAL",
+                        "ORIGINAL_PACK",
+                        "BUNDLE"
+                      ]
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "store_id": {
+                      "type": "integer"
+                    },
+                    "display_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "display_name_ruby": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "sell_price": {
+                      "type": "integer"
+                    },
+                    "buy_price": {
+                      "type": "integer"
+                    },
+                    "category_id": {
+                      "type": "integer"
+                    },
+                    "genre_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "group_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "jan_code_as_product_code": {
+                      "type": "boolean"
+                    },
+                    "readonly_product_code": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "is_buy_only": {
+                      "type": "boolean"
+                    },
+                    "allow_auto_print_label": {
+                      "type": "boolean"
+                    },
+                    "allow_round": {
+                      "type": "boolean"
+                    },
+                    "rarity": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "pack_name": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "expansion": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cardnumber": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "keyword": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "cardseries": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "card_type": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option1": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option2": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option3": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option4": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "option5": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "option6": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "オプション6"
+                    },
+                    "release_date": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "displaytype1": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "displaytype2": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "weight": {
+                      "type": "integer"
+                    },
+                    "market_price_updated_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "market_price": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "previous_market_price": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "market_price_gap_rate": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "order_number": {
+                      "type": "integer"
+                    },
+                    "products_stock_number": {
+                      "type": "integer"
+                    },
+                    "infinite_stock": {
+                      "type": "boolean"
+                    },
+                    "init_stock_number": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "expire_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "start_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "tablet_allowed": {
+                      "type": "boolean"
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "myca_item_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "myca_pack_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "image_url": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "jan_code": {
+                      "type": "string",
+                      "nullable": true,
+                      "pattern": "^d+$"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "department_id": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "hidden_products": {
+                      "type": "boolean"
+                    },
+                    "original_pack_products": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "item_id": {
+                            "type": "integer"
+                          },
+                          "product_id": {
+                            "type": "integer"
+                          },
+                          "item_count": {
+                            "type": "integer"
+                          },
+                          "staff_account_id": {
+                            "type": "integer"
+                          },
+                          "process_id": {
+                            "type": "string"
+                          },
+                          "wholesale_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "staff_account": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "exclusiveMinimum": true,
+                                "description": "アカウントID"
+                              },
+                              "display_name": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "アカウント名"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "display_name"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "item_id",
+                          "product_id",
+                          "item_count",
+                          "staff_account_id",
+                          "process_id",
+                          "wholesale_price",
+                          "staff_account"
+                        ]
+                      }
+                    },
+                    "products": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "BUNDLE",
+                              "ORIGINAL_PACK",
+                              "NORMAL"
+                            ]
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "store_id": {
+                            "type": "integer"
+                          },
+                          "item_id": {
+                            "type": "integer"
+                          },
+                          "is_buy_only": {
+                            "type": "boolean"
+                          },
+                          "specific_sell_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "specific_buy_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "retail_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "sell_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "buy_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "ec_sell_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "specific_ec_sell_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "actual_ec_sell_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "stock_number": {
+                            "type": "integer"
+                          },
+                          "pos_reserved_stock_number": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "mycalinks_ec_enabled": {
+                            "type": "boolean"
+                          },
+                          "ec_stock_number": {
+                            "type": "integer"
+                          },
+                          "disable_ec_auto_stocking": {
+                            "type": "boolean"
+                          },
+                          "is_active": {
+                            "type": "boolean"
+                          },
+                          "arrow_auto_price_adjustment": {
+                            "type": "boolean"
+                          },
+                          "force_no_price_label": {
+                            "type": "boolean"
+                          },
+                          "specific_auto_sell_price_adjustment": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "is_special_price_product": {
+                            "type": "boolean"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          },
+                          "display_name_ruby": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "keyword": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "image_url": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "product_code": {
+                            "type": "string",
+                            "nullable": true,
+                            "pattern": "^d+$"
+                          },
+                          "readonly_product_code": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "allowed_point": {
+                            "type": "boolean"
+                          },
+                          "tablet_allowed": {
+                            "type": "boolean"
+                          },
+                          "average_wholesale_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "minimum_wholesale_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "maximum_wholesale_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "condition_option_id": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "deleted": {
+                            "type": "boolean"
+                          },
+                          "actual_sell_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "actual_buy_price": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "sell_price_updated_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "buy_price_updated_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "wholesale_price": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id",
+                          "store_id",
+                          "item_id",
+                          "is_buy_only",
+                          "specific_sell_price",
+                          "specific_buy_price",
+                          "retail_price",
+                          "sell_price",
+                          "buy_price",
+                          "ec_sell_price",
+                          "specific_ec_sell_price",
+                          "actual_ec_sell_price",
+                          "stock_number",
+                          "pos_reserved_stock_number",
+                          "mycalinks_ec_enabled",
+                          "ec_stock_number",
+                          "disable_ec_auto_stocking",
+                          "is_active",
+                          "arrow_auto_price_adjustment",
+                          "force_no_price_label",
+                          "specific_auto_sell_price_adjustment",
+                          "is_special_price_product",
+                          "display_name",
+                          "display_name_ruby",
+                          "keyword",
+                          "image_url",
+                          "product_code",
+                          "readonly_product_code",
+                          "description",
+                          "allowed_point",
+                          "tablet_allowed",
+                          "average_wholesale_price",
+                          "minimum_wholesale_price",
+                          "maximum_wholesale_price",
+                          "condition_option_id",
+                          "deleted",
+                          "actual_sell_price",
+                          "actual_buy_price",
+                          "sell_price_updated_at",
+                          "buy_price_updated_at",
+                          "created_at",
+                          "updated_at",
+                          "wholesale_price"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "type",
+                    "id",
+                    "store_id",
+                    "display_name",
+                    "display_name_ruby",
+                    "sell_price",
+                    "buy_price",
+                    "category_id",
+                    "genre_id",
+                    "group_id",
+                    "jan_code_as_product_code",
+                    "readonly_product_code",
+                    "is_buy_only",
+                    "allow_auto_print_label",
+                    "allow_round",
+                    "rarity",
+                    "pack_name",
+                    "expansion",
+                    "cardnumber",
+                    "keyword",
+                    "cardseries",
+                    "card_type",
+                    "option1",
+                    "option2",
+                    "option3",
+                    "option4",
+                    "option5",
+                    "option6",
+                    "release_date",
+                    "displaytype1",
+                    "displaytype2",
+                    "weight",
+                    "market_price_updated_at",
+                    "market_price",
+                    "previous_market_price",
+                    "market_price_gap_rate",
+                    "order_number",
+                    "products_stock_number",
+                    "infinite_stock",
+                    "init_stock_number",
+                    "expire_at",
+                    "start_at",
+                    "tablet_allowed",
+                    "description",
+                    "myca_item_id",
+                    "myca_pack_id",
+                    "image_url",
+                    "created_at",
+                    "updated_at",
+                    "jan_code",
+                    "deleted",
+                    "department_id",
+                    "hidden_products",
+                    "original_pack_products"
+                  ],
+                  "description": "作成できたオリパの情報"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{store_id}/item/category/{item_category_id}": {
+      "delete": {
+        "summary": "カテゴリ削除",
+        "description": "商品マスタのカテゴリを削除する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "deleteItemCategory",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "store_id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "item_category_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "string",
+                      "enum": [
+                        "削除が完了しました"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{store_id}/item/category/{item_category_id}/condition-option": {
+      "post": {
+        "summary": "カテゴリ選択肢作成・更新",
+        "description": "商品マスタのカテゴリ選択肢を作成・更新する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "createOrUpdateConditionOption",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "store_id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "item_category_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "description": "編集を行うときに必要なID"
+                  },
+                  "display_name": {
+                    "type": "string"
+                  },
+                  "handle": {
+                    "type": "string",
+                    "nullable": true,
+                    "enum": [
+                      "O1_S",
+                      "O2_A",
+                      "O3_A_MINUS",
+                      "O4_B",
+                      "O5_C",
+                      "O6_D",
+                      "O1_BRAND_NEW",
+                      "O2_LIKE_NEW",
+                      "O3_USED"
+                    ]
+                  },
+                  "description": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "rate_variants": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "group_id": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "genre_id": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "auto_sell_price_adjustment": {
+                          "type": "string"
+                        },
+                        "auto_buy_price_adjustment": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "auto_sell_price_adjustment",
+                        "auto_buy_price_adjustment"
+                      ]
+                    },
+                    "description": "価格自動調整の定義"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "handle": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "O1_S",
+                        "O2_A",
+                        "O3_A_MINUS",
+                        "O4_B",
+                        "O5_C",
+                        "O6_D",
+                        "O1_BRAND_NEW",
+                        "O2_LIKE_NEW",
+                        "O3_USED"
+                      ]
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "item_category_id": {
+                      "type": "integer"
+                    },
+                    "display_name": {
+                      "type": "string"
+                    },
+                    "tablet_allowed": {
+                      "type": "boolean"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "description": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "rate_variants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "auto_sell_price_adjustment_round_rule": {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              "up",
+                              "down",
+                              "round"
+                            ]
+                          },
+                          "auto_buy_price_adjustment_round_rule": {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              "up",
+                              "down",
+                              "round"
+                            ]
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "option_id": {
+                            "type": "integer"
+                          },
+                          "group_id": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "genre_id": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "auto_sell_price_adjustment": {
+                            "type": "string"
+                          },
+                          "auto_buy_price_adjustment": {
+                            "type": "string"
+                          },
+                          "auto_sell_price_adjustment_round_rank": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "auto_buy_price_adjustment_round_rank": {
+                            "type": "integer",
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "auto_sell_price_adjustment_round_rule",
+                          "auto_buy_price_adjustment_round_rule",
+                          "id",
+                          "option_id",
+                          "group_id",
+                          "genre_id",
+                          "auto_sell_price_adjustment",
+                          "auto_buy_price_adjustment",
+                          "auto_sell_price_adjustment_round_rank",
+                          "auto_buy_price_adjustment_round_rank"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "handle",
+                    "id",
+                    "item_category_id",
+                    "display_name",
+                    "tablet_allowed",
+                    "deleted",
+                    "description",
+                    "rate_variants"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/store/{store_id}/item/category/{item_category_id}/condition-option/{condition_option_id}": {
+      "delete": {
+        "summary": "カテゴリ選択肢削除",
+        "description": "商品マスタのカテゴリ選択肢を削除する\n\n必要ロール: POSユーザー\n",
+        "tags": [
+          "item"
+        ],
+        "operationId": "deleteConditionOption",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "store_id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "item_category_id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "name": "condition_option_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功レスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "string",
+                      "enum": [
+                        "削除が完了しました"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "エラーレスポンス",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "状態選択肢を削除するためには、紐づいている在庫の在庫数がすべて0でないといけません"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

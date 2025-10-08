@@ -1,0 +1,719 @@
+//accountリソース関連
+//Storeなども含まれる
+
+
+
+//マイグレーションスクリプトでやること
+//Account.codeをStaffのcodeでうめる（同時にcode_updated_atも）
+//マスター権限グループ（全部true）を作る　法人用 iD: 100 ・店舗用 iD: 101 の二つ　店舗用は法人編集ができない
+//既存のアカウントを全て法人用マスター権限グループに割り当てる
+
+
+
+
+enum AccountKind {
+  corp //本部アカウント（法人アカウント）
+  store //店舗アカウント（お店に一つ）
+  staff //担当者アカウント
+  register //レジアカウント
+}
+
+
+
+//アカウント情報を格納
+model Account {
+  id                      Int            @db.UnsignedInt()          @id @default(autoincrement()) /// @zod.number.int().positive().describe('アカウントID')
+
+  display_name            String? /// @zod.string.describe('アカウント名')
+  nick_name               String? /// @zod.string.describe('従業員の表示名')
+  email                   String                  @unique /// @zod.string.email({ message: 'Invalid email address' }).describe('メールアドレス'),
+  hashed_password         String                  @db.Text //ハッシュ化されたログインパスワード
+  salt String? //パスワードをハッシュ化した時に使ったソルト
+
+  code Int? /// @zod.number.int().positive().describe('従業員番号（Master Accountはnull）')
+  
+  //codeが変わった時にこのフィールドも変える（トリガーでは設定しないことにする）
+  code_updated_at              DateTime?   @db.Timestamp(0)
+  
+  group_id Int  @db.UnsignedInt() /// @zod.number.int().positive().describe('権限GroupのID')
+  group  Account_Group  @relation(fields: [group_id], references: [id], onDelete: Restrict) //アカウントグループが消えないようにする
+
+
+  @@unique([linked_corporation_id, code])
+  @@index([deleted, linked_corporation_id, code])
+
+  //以下廃止
+  // kind                    AccountKind //アカウントの種類 corp | store | staff | register
+
+  //以下のフィールドは廃止予定（linked_corporation_idで全ての説明がつくため）
+  // corporation             Corporation? @relation("corpAccountCorporationInfo") //このアカウントが法人アカウントだった時、結びついている法人オブジェクト
+
+  linked_corporation_id Int  @db.UnsignedInt() /// @zod.number.int().positive().describe('このアカウントを管理している企業のID')
+  linked_corporation Corporation @relation("linkedCorporationInfo", fields: [linked_corporation_id], references: [id], onDelete: Cascade)
+
+  // register Register? レジとの結びつきとかもなくなる
+  // staff             Staff? スタッフもなくなる
+
+  stores                  Account_Store[] //管理できる店舗
+  
+  login_flg    Boolean        @default(true)        @db.UnsignedTinyInt() //初回ログインを済ませたかどうか
+
+  losses                  Loss[] //このアカウントが担当となっているロス
+  transaction_staffs      Transaction[]           @relation("transactionStaff") //このアカウントが担当となっている取引
+  transaction_reception_staffs Transaction[]           @relation("transactionReceptionStaff") //このアカウントが担当となっている取引
+  transaction_input_staffs Transaction[]           @relation("transactionInputStaff") //このアカウントが担当となっている取引
+  stockings               Stocking[] //このアカウントが担当となっている仕入れ
+  product_stock_histories Product_Stock_History[] 
+  product_ec_stock_histories Product_Ec_Stock_History[]
+  register_settlements    Register_Settlement[] //このアカウントが担当となっているレジ精算
+  cash_history            Register_Cash_History[] //現金変動履歴
+  customer_point_histories Customer_Point_History[] //関与した、顧客のポイント履歴
+  pack_open_history       Pack_Open_History[] //パック開封
+  pack_open_products Pack_Open_Products[] //パック開封の結果
+  original_pack_products Original_Pack_Product[] //定義したオリパ在庫
+  set_deals               Set_Deal[] //セット販売の作成
+  inventories             Inventory[] //棚卸
+  inventory_products Inventory_Products[] //棚卸しの中身
+  departments             Department[] //作成に関与した部門
+  app_advertisements App_Advertisement[] //うった広告
+  appraisal Appraisal[] //鑑定の作成に関与したスタッフ
+  purchase_tables Purchase_Table[] //作成した買取表
+  ec_contacts Ec_Order_Cart_Store_Contact_Message[] //ECオーダーのストアごとのお問い合わせ
+  reservation_receptions Reservation_Reception[] //予約受付
+  store_shipments Store_Shipment[] //出荷の作成に関与したスタッフ
+  locations Location[] //ロケーションの作成に関与したスタッフ
+  
+  deleted                 Boolean        @default(false)        @db.UnsignedTinyInt() //削除されたかどうか
+  created_at              DateTime                @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at              DateTime                @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+}
+
+//アカウントグループ（権限グループ）
+model Account_Group {
+  id                      Int           @db.UnsignedInt()           @id @default(autoincrement()) /// @zod.number.int().positive().describe('アカウントGroupのID')
+  accounts Account[] //このグループに所属しているアカウント
+  corporation_id Int?  @db.UnsignedInt() /// @zod.number.int().positive().describe('このアカウントGroupを作った法人 これがnullだったらシステムで固定されている権限Groupということになる')
+  corporation Corporation? @relation(fields: [corporation_id], references: [id], onDelete: Cascade)
+  display_name String /// @zod.string.describe('アカウントGroupの表示名')
+  description String? /// @zod.string.describe('アカウントGroupの説明（使わないかも）')
+
+  //ここからポリシーの定義（ポリシー自体の種類がアカウントグループによって変わるわけではないのと、パフォーマンスのため別テーブルで定義はしない）
+
+  create_account Boolean   @default(false)  @db.UnsignedTinyInt() //アカウント作成ができるかどうか
+  update_corporation Boolean   @default(false)  @db.UnsignedTinyInt() //法人情報自体を更新できるか
+  admin_mode Boolean   @default(false)  @db.UnsignedTinyInt() //管理モードとして起動できるか
+  update_store Boolean   @default(false)  @db.UnsignedTinyInt() //店舗自体の編集
+  sales_mode Boolean   @default(false)  @db.UnsignedTinyInt() //営業モードとして起動できるか
+  update_store_setting Boolean   @default(false)  @db.UnsignedTinyInt() //店舗設定
+
+  //販売
+  get_transaction_customer_info Boolean   @default(false)  @db.UnsignedTinyInt() //会員情報の表示
+  set_transaction_manual_discount  Boolean  @default(false)   @db.UnsignedTinyInt() //手動での値引き
+  create_transaction_return  Boolean  @default(false)   @db.UnsignedTinyInt() //返品　※APIレベル
+
+  //買取
+  create_buy_reception  Boolean   @default(false)  @db.UnsignedTinyInt() //買取受付
+  assess_buy_transaction  Boolean  @default(false)   @db.UnsignedTinyInt() //査定
+  finish_buy_transaction  Boolean  @default(false)   @db.UnsignedTinyInt() //買取精算
+  set_buy_transaction_manual_product_price  Boolean   @default(false)  @db.UnsignedTinyInt() //手動金額設定
+
+  //商品
+  list_item  Boolean  @default(false)   @db.UnsignedTinyInt() //商品一覧
+  list_original_pack  Boolean  @default(false)   @db.UnsignedTinyInt() //オリパ一覧
+
+  //在庫
+  list_product  Boolean  @default(false)   @db.UnsignedTinyInt() //在庫一覧
+
+  //棚卸
+  list_inventory  Boolean  @default(false)   @db.UnsignedTinyInt() //棚卸の閲覧
+
+  //仕入れ先
+  list_stocking_supplier  Boolean  @default(false)   @db.UnsignedTinyInt() //仕入れ先一覧
+
+  //入荷
+  list_stocking   Boolean  @default(false)   @db.UnsignedTinyInt() //入荷一覧
+
+  //入出金
+  list_cash_history    Boolean   @default(false)  @db.UnsignedTinyInt() //入出金履歴
+
+  //取引履歴
+  list_transaction    Boolean  @default(false)   @db.UnsignedTinyInt() //取引履歴一覧
+
+  //顧客管理
+  list_customer   Boolean  @default(false)   @db.UnsignedTinyInt() //顧客一覧
+
+  //売り上げ分析
+  get_stats   Boolean  @default(false)   @db.UnsignedTinyInt() //売り上げ分析
+
+  //買取表
+  list_purchase_table   Boolean  @default(false)   @db.UnsignedTinyInt() //買取表一覧
+
+  //ここまで
+
+  created_at              DateTime                @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at              DateTime                @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+//アカウントと店舗の結びつき
+model Account_Store {
+  account_id Int  @db.UnsignedInt() /// @zod.number.int().positive().describe('アカウントID')
+  account    Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  store_id   Int  @db.UnsignedInt() /// @zod.number.int().positive().describe('店舗ID')
+  store      Store   @relation(fields: [store_id], references: [id], onDelete: Cascade)
+
+  @@id([account_id, store_id])
+}
+
+
+enum TaxMode {
+  INCLUDE //内税
+  EXCLUDE //外税
+}
+
+enum RoundRule {
+  UP
+  DOWN
+  ROUND
+}
+
+//会社の定義
+model Corporation {
+  id                      Int           @db.UnsignedInt()           @id @default(autoincrement()) /// @zod.number.int().positive().describe('法人ID')
+  name String /// @zod.string.describe('会社名')
+  ceo_name String? /// @zod.string.describe('代表者名')
+  head_office_address String? /// @zod.string.describe('本社所在地')
+  phone_number String? /// @zod.string.describe('電話番号')
+  kobutsusho_koan_iinkai String? /// @zod.string.describe('古物商公安委員会')
+  kobutsusho_number String? /// @zod.string.describe('古物商番号')
+
+  invoice_number String? /// @zod.string.describe('登録番号')
+  zip_code         String? /// @zod.string.describe('郵便番号')
+
+  //Squareのトークンなど
+  square_access_token String? /// @zod.string.describe('メインで使うアクセスToken')
+  square_access_token_expires_at DateTime?           @db.Timestamp(0) /// @zod.date.describe('Tokenの有効期限')
+  square_refresh_token String? /// @zod.string.describe('リフレッシュToken')
+  square_available Boolean @default(false) @db.UnsignedTinyInt() //スクエアが利用可能かどうか（refreshトークンが使えなかった時、自動でfalseにしたい）
+
+  //店舗デフォルト設定（別モデルにしようかと思ったけどやっぱりやめた　法人自体の設定という見方ができるため）
+  tax_mode TaxMode @default(INCLUDE) //デフォルトは内税
+  price_adjustment_round_rule RoundRule @default(UP) // 丸め方
+  price_adjustment_round_rank Int @default(1) /// @zod.number.int().positive().describe('デフォルトでは桁は動かさない')
+  use_wholesale_price_order_column WholesalePriceOrderColumn @default(unit_price) // 仕入れ値で使う順番
+  use_wholesale_price_order_rule OrderRule @default(desc) //デフォルトでは降順
+  wholesale_price_keep_rule WholesalePriceKeepRule @default(individual) //デフォルトでは個別
+
+  //従業員アカウントを使うかどうか（デフォルトではtrue）
+  enabled_staff_account   Boolean @default(true) @db.UnsignedTinyInt() //有効だと、従業員バーコードを読み取らないと実行できないAPIが多い
+  
+  //法人アカウントが廃止されたためこちらもなしで
+  // account_id Int?  @db.UnsignedInt() @unique //結びついている法人アカウント
+  // account Account? @relation("corpAccountCorporationInfo", fields: [account_id], references: [id], onDelete: Cascade)
+
+  accounts Account[] @relation("linkedCorporationInfo") //こっちはこの法人に結びついているアカウントたち
+
+  account_groups Account_Group[] //この法人が作ったアカウントグループ
+  worker_tasks Task[]
+  contract Contract? //契約情報
+
+  created_at              DateTime                @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at              DateTime                @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+
+
+
+
+
+
+//レジの点検タイミング
+enum RegisterCheckTiming {
+  BEFORE_OPEN //開店前
+  BEFORE_CLOSE //閉店前
+  BOTH //両方
+  MANUAL //手動
+}
+
+//レジのステータス
+enum RegisterStatus {
+  OPEN //使用中（会計ができる状態）
+  CLOSED //締め済み（会計ができない状態 閉店ができる状態）
+}
+
+//レジ
+model Register {
+  id                      Int           @db.UnsignedInt()           @id @default(autoincrement()) /// @zod.number.int().positive().describe('レジID')
+  display_name String /// @zod.string.describe('レジ名')
+
+  status RegisterStatus @default(CLOSED) //デフォルトはCLOSED 締め点検をした後にCLOSED、現状は開店する時に自動でOPEN
+  is_primary  Boolean @default(false)        @db.UnsignedTinyInt() //最初に作成したメインレジかどうか
+
+  description String? /// @zod.string.describe('メモ')
+  total_cash_price Int @default(0) /// @zod.number.int().positive().describe('このレジに格納されている理論上現金量')
+
+  cash_reset_price Int @default(0)  @db.UnsignedInt() /// @zod.number.int().positive().describe('リセットする金額')
+  auto_print_receipt_enabled Boolean        @default(true)        @db.UnsignedTinyInt() //レシートの自動印刷がONになっているかどうか
+
+  square_device_id String? /// @zod.string.describe('Squareにおける端末ID（Terminal連携用）') もしかすると一つのTerminalを複数のレジで使う可能性もあるため、unique制約は入れない このフィ一ルドは、デバイスがペアリングされた時にのみ入る形
+  square_device_code String? /// @zod.string.describe('セットアップ時に必要なDevice Codeを何となく保持させる')
+  square_device_name String? /// @zod.string.describe('Square上で設定されている端末名 端末名の変更は特に監視しないことにする')
+  square_device_code_expires_at DateTime?  @db.Timestamp(0) //スクエア連携用のデバイスコードの期限
+
+  @@unique([store_id,square_device_code])
+
+  sell_payment_method String @default("cash,bank,square,paypay,felica") /// @zod.string.describe('squareはCard paypayはQR felicaは電子マネー')
+  buy_payment_method String @default("cash,bank") /// @zod.string.describe('買取の支払い方法')
+
+  //アカウントとの紐付けは無くなったため廃止
+
+  // account_id Int?  @db.UnsignedInt() @unique //結びついているアカウント アカウントに結びついていなくても良いためnullable これがステータスと直結してくる
+  // account Account? @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  store_id          Int  @db.UnsignedInt() //このレジが存在するストア
+  store             Store     @relation(fields: [store_id], references: [id], onDelete: Cascade)
+
+  cash_histories Register_Cash_History[] //このレジの現金の履歴
+  settlements Register_Settlement[] //このレジの清算
+  transactions Transaction[] //このレジを使った取引
+  status_histories Register_Status_History[] //ステータスの履歴
+
+  deleted                 Boolean        @default(false)        @db.UnsignedTinyInt() //削除されたかどうか
+  @@index([deleted])
+  created_at              DateTime                @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at              DateTime                @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  
+  //廃止予定
+  cash_reset_timing RegisterCashResetTiming @default(AFTER_CLOSED) //レジ金のリセットを行うタイミング
+  cash_check_timing RegisterCheckTiming @default(BEFORE_CLOSE) //デフォルトは閉店前
+  cash_reset_enabled Boolean @default(true) @db.UnsignedTinyInt() //レジ金のリセット処理を有効にするかどうか
+
+}
+
+//レジの開け閉め履歴
+model Register_Status_History {
+
+  register_id      Int  @db.UnsignedInt()
+  register         Register    @relation(fields: [register_id], references: [id], onDelete: Cascade)
+  setting_value RegisterStatus
+  run_at        DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  @@id([register_id, run_at])
+
+}
+
+//以下も廃止予定
+enum RegisterCashResetTiming {
+  AFTER_CLOSED //閉店後
+  MANUAL //手動（しない）
+}
+
+
+
+
+enum RegisterCashHistorySourceKind {
+  transaction_buy
+  transaction_buy_return
+  transaction_sell
+  transaction_sell_return
+  reservation_deposit //予約前金
+  reservation_deposit_return //予約前金返金
+  import //入金
+  export //出金
+  adjust //計算が合わない時用 使わないため、[廃止予定]
+  sales //次の営業に備える時用（[TODO] resetとかにしたい）
+}
+
+//ストアの現金の変動履歴
+//レジ金を全体で管理する方式でも、register_idは入れることにする　なお、result_register_cash_priceは0になる
+model Register_Cash_History {
+  id                Int              @db.UnsignedInt()              @id @default(autoincrement())
+  staff_account_id  Int?  @db.UnsignedInt() //担当者
+  staff_account     Account?                      @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  source_kind       RegisterCashHistorySourceKind //取引故なのか、入金、出金、調整なのか
+  source_id         Int?  @db.UnsignedInt() //結び付けられているリソースのID transaction_id, 調整だったらsettlement_id, 入出金の場合はなしで
+  change_price      Int //変動額
+  description       String? //備考、入出金の理由など
+  result_cash_price Int? //結果、現金が何円になったのか（店舗全体）
+  result_register_cash_price Int? //結果、このレジの現金が何円になったのか 個別でレジ金を管理する場合のみ
+  register_id Int  @db.UnsignedInt()
+  register Register  @relation(fields: [register_id], references: [id], onDelete: Cascade)
+  datetime          DateTime                      @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //日時
+
+  @@index([register_id, source_kind, datetime])
+}
+
+//レジ精算（点検）の種類
+enum RegisterSettlementKind {
+  OPEN //開店時のレジ点検（点検と同時にレジがOPENになる）
+  MIDDLE //中間点検
+  CLOSE //閉店時のレジ点検（点検と同時にレジがCLOSEDになる）
+}
+
+//レジ精算
+model Register_Settlement {
+  id                            Int  @db.UnsignedInt()    @id @default(autoincrement())
+  transaction_sell_total        Int //このレジの現金販売売上（開店してから）
+  transaction_sell_discount_total Int @default(0) //このレジの現金販売割引合計（絶対値）
+  transaction_buy_total         Int //このレジの現金買取売上（絶対値）
+  transaction_buy_discount_total Int @default(0) //このレジの現金買取割増合計（絶対値）
+  transaction_sell_return_total Int //このレジの現金販売返金合計（絶対値）
+  transaction_buy_return_total  Int //このレジの現金買取返金合計（絶対値）
+  reservation_deposit_total Int @default(0) //このレジの予約前金合計
+  reservation_deposit_return_total Int @default(0) //このレジの予約前金返金合計
+  import_total                  Int //このレジの当日入金合計
+  export_total                  Int //このレジの当日出金合計
+  // adjust_total Int @default(0) //過不足を埋めるための調整を　開店時から精算までに行ってた場合、それの合計（負の数もあり） ないため廃止
+  // sales_total Int @default(0) //この営業日の開店時から閉店前までの現金のリセット合計 ないため廃止
+  init_cash_price Int @default(0) //開店時のレジ現金量 ※途中からのデータしかない
+  ideal_cash_price              Int //このレジの理論上の現金
+  difference_price              Int //このレジの過不足 actual_price - ideal_price
+  actual_cash_price             Int //このレジの実際の現金
+  created_at                    DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  data_start_at                 DateTime @db.Timestamp(0) //このレジ精算の対象の開店日時（開レジ日時じゃなくて開店でOK）
+  data_end_at                   DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //このレジ精算の対象の精算日時
+  staff_account_id              Int  @db.UnsignedInt()
+  staff_account                 Account  @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  register_id Int?  @db.UnsignedInt() //一気に閉めるモードにおいてはここの値がnullになる
+  register Register?  @relation(fields: [register_id], references: [id], onDelete: Cascade)
+
+  store_id Int? @db.UnsignedInt() //紐づいているregistersでstore_idもわかるが、リレーションとして遠いためstore_idも持たせる形
+  store Store?  @relation(fields: [store_id], references: [id], onDelete: Cascade)
+
+  kind RegisterSettlementKind @default(CLOSE) //デフォルトは閉店点検
+
+  register_settlement_drawers Register_Settlement_Drawer[] //金種の内訳
+  sales Register_Settlement_Sales[] //売り上げまとめ
+
+  //以下廃止予定
+  tomorrow_start_cash_price     Int      @default(0) //明日の釣り銭準備金 レジ精算と、レジ金のリセットは連動させないため、このフィールドは廃止予定
+}
+
+
+
+enum TransactionSalesKind {
+  sell
+  buy
+  sell_return
+  buy_return
+}
+
+//レジ精算時の売り上げのまとめ 前金は含まれない
+model Register_Settlement_Sales {
+  register_settlement_id Int  @db.UnsignedInt()
+  register_settlement    Register_Settlement @relation(fields: [register_settlement_id], references: [id], onDelete: Cascade)
+  kind TransactionSalesKind
+  payment_method TransactionPaymentMethod
+  total_price Int @db.UnsignedInt()
+  @@id([register_settlement_id, kind, payment_method])
+}
+
+//ドロア現金内訳
+model Register_Settlement_Drawer {
+  register_settlement_id Int  @db.UnsignedInt()
+  register_settlement    Register_Settlement @relation(fields: [register_settlement_id], references: [id], onDelete: Cascade)
+  denomination           Int //金種 1 5 10 50 100 500 1000 2000 5000 10000
+  item_count             Int //個数
+
+  @@id([register_settlement_id, denomination])
+}
+
+
+
+
+//staff関連 廃止
+//担当者の定義
+// model Staff {
+//   id                      Int        @db.UnsignedInt()              @id @default(autoincrement()) //一応独自でIDを持たせるようにする
+//   code Int //従業員番号 法人に対して一意
+//   account_id Int  @db.UnsignedInt() @unique //結びついているアカウント 必ず結びついてないといけない
+//   account Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+//   //codeが変わった時にこのフィールドも変える（トリガーでは設定しないことにする）
+//   code_updated_at              DateTime    @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+//   @@index([code])
+// }
+
+
+
+
+enum OrderRule {
+  desc
+  asc
+}
+
+//仕入れ値の使い方のルールなど
+enum WholesalePriceOrderColumn {
+  unit_price //値段
+  arrived_at //仕入れ日時
+}
+
+//仕入れ値の保持の仕方のルール
+enum WholesalePriceKeepRule {
+  individual //個別
+  average //平均値（整数化したもの）
+}
+
+//ポイント付与などの機会
+enum PointOpportunity {
+  transaction //会計ごと
+  visit //来店ごと
+}
+
+//決済サービスの種類
+
+//店舗テーブル
+//[TODO] さすがにドメインごとに設定値をモデル分けした方が良さそう
+//[TODO] 住所系（顧客の住所、大口出庫、店舗...etc）はAddressテーブルとかを作って一元管理したいかも？　形式統一のため
+model Store {
+  id           Int   @db.UnsignedInt()   @id @default(autoincrement())
+  code String @db.VarChar(32) @unique
+
+  display_name String? //店舗名
+
+  //店基本情報
+  opened Boolean @default(false) @db.UnsignedTinyInt() //開店しているかどうか
+  is_active   Boolean @default(true) @db.UnsignedTinyInt() //アクティベート（初期化）されたかどうか
+
+  total_cash_price Int     @default(0) //店が保有している現金 個別でレジを管理するモードじゃなかったら、この金額=レジ金額ということになる
+  image_url        String? //ロゴ画像 使わないため廃止予定
+  receipt_logo_url String? //レシートのロゴ画像
+  zip_code         String? //郵便番号
+  full_address     String? //住所
+  phone_number     String? //電話番号
+
+  leader_name String? //代表者名  
+
+  buy_term String? @db.Text //買取の利用規約文
+
+  //QR発行用IV
+  qr_iv String
+
+  //[TODO] 処理に時間がかかるものなどは、開始時間や終了時間、エラーなどを記録する「Tasks」テーブルのようなものを作ってそこで管理したい もしくはSQSなどを使うか
+  status_message String? //この店のステータスメッセージ（行われている最中の処理などを説明する）
+  status_message_updated_at DateTime? @db.Timestamp(0) //ステータスメッセージの最終更新日時
+
+  //Square関連
+  square_location_id String?
+
+  
+  //レジに接続している端末IDはレジアカウントで管理したい
+
+  //設定など
+  auto_print_receipt Boolean @default(false) @db.UnsignedTinyInt() //レシートの自動印刷をするかどうか
+  allow_print_no_price_label Boolean @default(false) @db.UnsignedTinyInt() //販売価格が0の商品のラベルを印刷するかどうか
+
+  product_name_meta_order String @default("expansion,cardnumber,rarity") //メタ情報の並び順
+
+  point_enabled  Boolean @default(true) @db.UnsignedTinyInt() //ポイント機能を利用するか否か
+
+  //ポイント付与周り
+  visit_point_enabled  Boolean @default(true) @db.UnsignedTinyInt() //来店ポイントを付与するか否か
+  visit_point_per PointOpportunity @default(transaction) //来店ポイントの付与機会
+  visit_point_amount Int @default(10) //来店ポイントの量
+  sell_point_enabled  Boolean @default(true) @db.UnsignedTinyInt() //販売ポイントを付与するか否か
+  sell_point_per Int @default(100) //何円につき販売ポイントを付与するのか
+  sell_point_limit_enabled  Boolean @default(true) @db.UnsignedTinyInt() //販売ポイント上限
+  sell_point_limit_per PointOpportunity @default(transaction) //販売ポイント制限の機会
+  sell_point_limit_amount Int @default(10) //販売ポイント制限の量
+  sell_point_payment_method String @default("cash,square,paypay,felica,bank") //販売ポイントの付与対象支払い方法
+  buy_point_enabled  Boolean @default(false) @db.UnsignedTinyInt() //買取ポイントを付与するか否か デフォルトは無効
+  buy_point_per Int @default(100) //何円につき買取ポイントを付与するのか
+  buy_point_limit_enabled  Boolean @default(true) @db.UnsignedTinyInt() //買取ポイント上限
+  buy_point_limit_per PointOpportunity @default(transaction) //買取ポイント制限の機会
+  buy_point_limit_amount Int @default(10) //買取ポイント制限の量
+  buy_point_payment_method String @default("cash,bank") //買取ポイントの付与対象支払い方法
+
+  //ポイント利用周り
+  point_rate Int @default(10) //1ポイントを利用する時現金の何円相当になるか
+  point_spend_limit_enabled  Boolean @default(true) @db.UnsignedTinyInt() //ポイント消費の制限を設けるか否か
+  point_spend_limit_per  PointOpportunity @default(transaction) //ポイント消費の制限の機会
+  point_spend_limit_amount Int @default(10) //ポイント消費の制限の量
+  point_expire_enabled  Boolean @default(true) @db.UnsignedTinyInt() //ポイントの有効期限を設定するか否か
+  point_expire_day Int @default(10) //何日でポイントの有効期限がくるようにするか（自動でポイントが0になる）
+
+  //税金周り
+  tax_rate Float @db.Float @default(0.1) //税率
+  tax_mode TaxMode @default(INCLUDE) //デフォルトは内税
+
+  //お金
+  price_adjustment_round_rule RoundRule @default(UP) //丸め方
+  price_adjustment_round_rank Int @default(1) //デフォルトでは桁は動かさない
+
+  //仕入れ値
+  use_wholesale_price_order_column WholesalePriceOrderColumn @default(unit_price) //仕入れ値を使う時の並び順のカラム指定 デフォルトでは仕入れ値
+  use_wholesale_price_order_rule OrderRule @default(desc) //デフォルトでは降順
+  wholesale_price_keep_rule WholesalePriceKeepRule @default(individual) //デフォルトでは個別
+
+  //レジ設定
+  register_cash_reset_enabled Boolean @default(true) @db.UnsignedTinyInt() //レジ金のリセット処理を有効にするかどうか
+  register_cash_check_timing RegisterCheckTiming @default(BEFORE_CLOSE) //デフォルトは閉店前
+  register_cash_manage_by_separately  Boolean @default(true) @db.UnsignedTinyInt() //レジごとに現金量を管理するかどうか
+
+  //EC設定は別モデルで（ECをオンにするかどうかだけこちらで保持させる）
+  mycalinks_ec_terms_accepted Boolean @default(false) @db.UnsignedTinyInt() //EC利用規約に同意したかどうか
+  mycalinks_ec_enabled Boolean @default(false) @db.UnsignedTinyInt()
+  ochanoko_ec_enabled Boolean @default(false) @db.UnsignedTinyInt() //おちゃのこEC連携の有効可否
+  shopify_ec_enabled Boolean @default(false) @db.UnsignedTinyInt() //ShopifyEC連携の有効可否
+  @@index([id, mycalinks_ec_enabled])
+
+  //EC設定
+  ec_setting Ec_Setting?
+
+  //従業員バーコードのタイムアウト時間
+  staff_barcode_timeout_minutes Int @default(60) /// @zod.number.int().positive().describe('従業員バーコードのタイムアウト時間（分）')
+
+  //在庫タブレット表示設定
+  hide_non_mycalinks_item_on_tablet Boolean @default(false) @db.UnsignedTinyInt() //マイカリンクスの商品以外をタブレットで非表示にするかどうか
+  hide_no_stock_product_on_tablet Boolean @default(false) @db.UnsignedTinyInt() //在庫が0の商品をタブレットで非表示にするかどうか
+  hide_no_sell_price_product_on_tablet Boolean @default(false) @db.UnsignedTinyInt() //販売価格が0の商品をタブレットで非表示にするかどうか
+
+  //買取表関連
+  purchase_table_push_notification_count Int @default(0) //買取表のプッシュ通知を本日に送信した回数 3以上の時、これ以上送信できない
+  purchase_table_push_notification_last_sent_at DateTime? @db.Timestamp(0) //買取表のプッシュ通知を送信した最終日時 この値次第で上のカラムがリセットされる
+
+  //請求元
+  billing_source_corporation_name String? /// @zod.string.describe('請求元法人名')
+  billing_source_address String? /// @zod.string.describe('請求元所在地')
+  billing_source_phone_number String? /// @zod.string.describe('請求元電話番号')
+  billing_source_email String? /// @zod.string.describe('請求元email')
+  billing_source_bank_name String? /// @zod.string.describe('請求元金融機関名')
+  billing_source_bank_branch_name String? /// @zod.string.describe('請求元金融機関支店名')
+  billing_source_bank_account_type String? /// @zod.string.describe('請求元金融機関口座種別')
+  billing_source_bank_account_number String? /// @zod.string.describe('請求元金融機関口座番号')
+  billing_source_bank_account_name_ruby String? /// @zod.string.describe('請求元金融機関口座名義（カナ）')
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  //ここにどの法人のものなのかも定義する
+  accounts             Account_Store[] //管理されているアカウント
+  items                Item[] //登録しているアイテム
+  products             Product[] //登録している商品
+  departments          Department[] //このストアを参照している部門
+  transactions         Transaction[] //このストアを参照している取引
+  // supplier_genres Supplier_Genre[] //仕入れ先区分
+  customers            Customer[] //この店の顧客テーブル
+  histories            Store_History[] //この店の設定変更履歴
+  losses               Loss[] //この店のロス
+  loss_genres          Loss_Genre[] //この店のロス区分
+  sales                Sale[] //この店のセール
+  stockings            Stocking[]
+  stocking_suppliers   Supplier[]
+  inventories          Inventory[]
+  inventory_shelf      Inventory_Shelf[]
+  set_deals            Set_Deal[]
+  appraisal Appraisal[] //鑑定
+  registers Register[]
+  app_advertisements App_Advertisement[] //うった広告
+  item_categories Item_Category[] //カテゴリ
+  item_genres Item_Genre[] //ジャンル
+  purchase_tables Purchase_Table[] //買取表
+  memos Memo[] //メモ
+  shipping_methods Shipping_Method[] //このストアのEC配送方法
+  ec_order_cart_stores Ec_Order_Cart_Store[]
+  register_settlements Register_Settlement[]
+  tablet_allowed_genres_categories Tablet_Allowed_Genre_Category[]
+  worker_tasks Task[]
+
+  specialties Specialty[] //特殊さ定義
+  reservations Reservation[] //予約
+  templates Template[] //カスタムテンプレート
+  consignment_clients Consignment_Client[] //委託依頼主
+  announcements Announcement_Store[] //POS上のお知らせ
+
+  from_store_shipments Store_Shipment[] @relation("fromStore") //この店舗が出荷元になってるやつ
+  to_store_shipments Store_Shipment[] @relation("toStore") //この店舗が出荷先になってるやつ
+
+  from_stores Store_Relation[] @relation("fromStore")
+  to_stores Store_Relation[] @relation("toStore")
+
+  locations Location[]
+  billing_clients Billing_Client[] //請求先
+
+  ec_about_us Ec_About_Us?
+
+  devices Device[] //周辺機器
+  ec_wish_list_products Ec_Wish_List_Product[] //ECほしい物リスト内の商品
+
+  //以下廃止予定
+  invoice_number   String? //インボイスの登録番号
+  include_tax  Boolean @default(true) @db.UnsignedTinyInt() //内税かどうか これがfalseだったら外税
+  allow_duty_free  Boolean @default(true) @db.UnsignedTinyInt() //免税を許すか許さないか
+  return_wholesale_price_order_column WholesalePriceOrderColumn @default(unit_price) //戻す時
+  return_wholesale_price_order_rule OrderRule @default(asc)
+
+  //決済周り 現金や銀行振込などを除く、カード/電子マネーなどの扱い
+  //レジごとに連携しているかどうかなどが変わるため廃止済み
+  payment_service PaymentService @default(original) //これわんちゃん必要ない
+
+}
+
+//店の設定変更履歴テーブル　トリガーによって挿入される
+model Store_History {
+  store_id      Int  @db.UnsignedInt()
+  store         Store    @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  kind          String
+  setting_value String?  @db.Text
+  run_at        DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  @@id([store_id, kind, run_at])
+}
+
+//Store to Storeの関係テーブル
+model Store_Relation {
+  from_store_id Int  @db.UnsignedInt()
+  from_store Store @relation("fromStore", fields: [from_store_id], references: [id], onDelete: Cascade)
+  to_store_id Int  @db.UnsignedInt()
+  to_store Store @relation("toStore", fields: [to_store_id], references: [id], onDelete: Cascade)
+
+  @@id([from_store_id, to_store_id])
+
+  mapping_defined Boolean @default(false) @db.UnsignedTinyInt() //状態などのマッピングが定義されているかどうか
+
+  category_mappings Item_Category_Mapping[]
+  condition_option_mappings Item_Category_Condition_Option_Mapping[]
+  genre_mappings Item_Genre_Mapping[]
+  specialty_mappings Specialty_Mapping[]
+  consignment_client_mappings Consignment_Client_Mapping[]
+  item_mappings Item_Mapping[]
+
+  store_shipments Store_Shipment[]
+}
+
+
+//店舗のメモ（一旦物理削除でいく方針）
+model Memo {
+  id           Int   @db.UnsignedInt()   @id @default(autoincrement())
+  store_id      Int  @db.UnsignedInt()
+  store         Store    @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  content String  @db.Text //内容
+  created_at              DateTime                @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at              DateTime                @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+//請求先リスト（大口在庫出庫機能？とかで使うやつ）
+model Billing_Client {
+  id Int @db.UnsignedInt() @id @default(autoincrement())
+  store_id Int @db.UnsignedInt()
+  store Store @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  display_name String /// @zod.string.describe('請求先名')
+  zip_code String? /// @zod.string.describe('郵便番号')
+  prefecture String? /// @zod.string.describe('都道府県')
+  city String? /// @zod.string.describe('市区町村')
+  address2 String? /// @zod.string.describe('番地以降')
+  building String? /// @zod.string.describe('建物名')
+  phone_number String? /// @zod.string.describe('電話番号')
+  fax_number String? /// @zod.string.describe('FAX番号')
+  email String? /// @zod.string.describe('email')
+  staff_name String? /// @zod.string.describe('担当者名')
+  payment_method String? /// @zod.string.describe('支払い方法')
+  description String? @db.Text /// @zod.string.describe('備考')
+  order_number Int @default(0) /// @zod.number.int().describe('表示順 0から順に表示されていく')
+  enabled Boolean @default(true) @db.UnsignedTinyInt() //有効かどうか
+  deleted Boolean @default(false) @db.UnsignedTinyInt() //削除されたかどうか
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}

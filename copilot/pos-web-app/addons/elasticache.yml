@@ -1,0 +1,59 @@
+# POSのPub/Subやキャッシュで利用するValkeyキャッシュサービス（サーバーレス）
+
+Parameters:
+  App:
+    Type: String
+  Env:
+    Type: String
+  Name:
+    Type: String
+
+Conditions:
+  # ステージングと本番環境のみ
+  IsAllowedEnvironment: !Or
+    - !Equals [!Ref Env, 'staging']
+    - !Equals [!Ref Env, 'production']
+
+Resources:
+  # キャッシュサービス用のSG
+  RedisSecurityGroup:
+    Condition: IsAllowedEnvironment
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub '${App}-${Env}-cache-server'
+      GroupName: !Sub '${App}-${Env}-cache-server'
+      VpcId: !ImportValue
+        Fn::Sub: '${App}-${Env}-VpcId'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId:
+            { Fn::ImportValue: !Sub '${App}-${Env}-EnvironmentSecurityGroup' }
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          CidrIp: 10.0.0.0/16
+
+  CacheServer:
+    Condition: IsAllowedEnvironment
+    Type: AWS::ElastiCache::ServerlessCache # サーバーレスで
+    Properties:
+      ServerlessCacheName: !Sub '${App}-${Env}-cache'
+      Engine: valkey # コストが低いらしいのでvalkeyで
+      MajorEngineVersion: 8
+      SecurityGroupIds:
+        - !Ref RedisSecurityGroup
+      SubnetIds:
+        !Split [',', { Fn::ImportValue: !Sub '${App}-${Env}-PrivateSubnets' }]
+      Tags:
+        - Key: Project
+          Value: mycapos
+
+  RedisUrlParameter:
+    Condition: IsAllowedEnvironment
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/copilot/${App}/${Env}/secrets/REDIS_URL'
+      Type: String
+      Value: !GetAtt CacheServer.Endpoint.Address

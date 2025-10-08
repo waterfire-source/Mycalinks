@@ -1,0 +1,28 @@
+mutation createProduct(
+  $product: ProductCreateInput!
+  $media: [CreateMediaInput!]
+) {
+  productCreate(product: $product, media: $media) {
+    product {
+      id
+      title
+      variants(first: 5) {
+        edges {
+          node {
+            id
+            title
+            price
+            inventoryQuantity
+            inventoryItem {
+              id
+            }
+          }
+        }
+      }
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}

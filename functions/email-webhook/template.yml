@@ -1,0 +1,103 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: lambda staging
+
+Parameters:
+  App:
+    Type: String
+    Default: pos
+  Env:
+    Type: String
+    Default: staging
+
+Conditions:
+  IsStaging: !Equals [!Ref Env, 'staging']
+
+Resources:
+  #おちゃのこのメールのやつ
+  EmailReceiveBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${App}-${Env}-email-bucket
+
+  EmailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref EmailReceiveBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowSESPutObject
+            Effect: Allow
+            Principal:
+              Service: ses.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${EmailReceiveBucket.Arn}/*'
+
+  EmailWebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${App}-${Env}-EmailWebhookFunction
+      Runtime: nodejs22.x
+      CodeUri: ./
+      Handler: app.handler
+      Timeout: 30
+      Environment:
+        Variables:
+          BOT_TOKEN: 'QXKsNHWmG3n3ZaFW6NJ8dPNf7yDdkNdeqx77qaw8.BiKV8isfQ5BibSzamWzm6Zut2QMRVKuxuu7gk5fK.ZLKKH8sMwzg7jpUgQ8UqTGcGpTdpVCYEEpKrYDHg.7qxrCZw553fKeBWrGBd3BJTwhiTvtcaQz4fahpR9.2PxdTr5xBACDnpGZ7g2V6vi5deRWw6xiWY3sB2fK'
+          WEB_APP_ORIGIN:
+            Fn::If:
+              - IsStaging
+              - 'https://staging.pos.mycalinks.io'
+              - 'https://pos.mycalinks.io'
+          OCHANOKO_EC_ORDER_EMAIL:
+            Fn::If:
+              - IsStaging
+              - 'ochanoko-ec-order@mycalinks.io'
+              - 'ochanoko-ec-order@mycalinks.com'
+          INFO_EMAIL: info@mycalinks.com
+          INFO_EMAIL_TO: kimura@myca.co.jp
+          SYSTEM_FROM: transfer@mycalinks.com
+          EXTERNAL_EC_WORKER_QUEUE_URL:
+            Fn::If:
+              - IsStaging
+              - 'https://sqs.ap-northeast-1.amazonaws.com/502078855105/pos-staging-worker-external-ec-EventsQueue-GCQ01pHRIFjX.fifo'
+              - 'https://sqs.ap-northeast-1.amazonaws.com/502078855105/pos-production-worker-external-ec-EventsQueue-W79q3d5Qj7WN.fifo'
+      Events:
+        S3Trigger:
+          Type: S3
+          Properties:
+            Bucket: !Ref EmailReceiveBucket
+            Events: s3:ObjectCreated:Put
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: email/
+
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Sub ${App}-${Env}-email-bucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendRawEmail
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - 'sqs:SendMessage'
+                - 'scheduler:*'
+                - 'events:*'
+                - 'kms:Decrypt'
+                - 'kms:Encrypt'
+                - 'kms:GenerateDataKey'
+              Resource: '*'
+
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - app.ts

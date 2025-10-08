@@ -1,0 +1,81 @@
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  create-release-pr:
+    runs-on: ubuntu-latest
+
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN_FOR_CODERABBIT }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Check PullRequest Exists
+        id: check_pr
+        env:
+          HEAD_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          COMMIT_MESSAGE=$(echo "${HEAD_MESSAGE}" | sed -n -e 1p)
+          echo "message=${COMMIT_MESSAGE}" >> "$GITHUB_OUTPUT"
+          echo "count=$(gh pr list -S 'in:title 【Mycalinksステージング反映】 is:open' | wc -l)" >> "$GITHUB_OUTPUT"
+      - name: Create Release Pull Request And Create Summary By Coderabbit
+        if: ${{ steps.check_pr.outputs.count == 0 }}
+        run: |
+          gh pr create \
+            -d \
+            -B staging \
+            -t '【Mycalinksステージング反映】${{ steps.check_pr.outputs.message }}' \
+            -a ${{ github.actor }}  \
+            --body-file ./.github/staging_pull_request_template.md
+
+          gh pr comment --body "
+          @coderabbitai
+          このPRで「実装した機能/修正」と「影響範囲」をあらためてこのPRの本文を直接編集して、該当見出し部分に記載してください。
+          本文へ追記するかどうかの確認は取らず、すぐに編集してしまって大丈夫です
+          なお、以下の条件に従って、箇条書きで記載してください
+
+          ＝実装した機能/修正＝
+          お客さんに伝えるメッセージであるため、表向きではわからないコードリファクタリングや軽微な修正などは除いてください
+          表向きでこのサービスを使った時に、人が「変わった」と感じる部分を要約してください
+          また、まとめるときはどの分野のどの機能/修正なのか、マークダウンのリストのネスト構造を活用しながらわかりやすく記載してください
+
+          ＝影響範囲＝
+          このPRで変更されたバックエンド側のサービスクラスやDB構造などを考慮しつつ、そのロジックに関連しているAPIなどを判断して、
+          そのAPIを利用している表向きでの機能を、お客さんにわかる形で記載してください
+          お客さんはこのメッセージを元に、バグがないか自分の手で触って動作確認します。
+          また、まとめるときはどの分野に影響が出るのか、マークダウンのリストのネスト構造を活用しながらわかりやすく記載してください
+          "
+
+      - name: Edit Release Pull Request
+        if: ${{ steps.check_pr.outputs.count != 0 }}
+        run: |
+          pr_data=$(gh pr list -S 'in:title 【Mycalinksステージング反映】 is:open' \
+            --json "title" \
+            | jq -c .[])
+          TITLE="$(echo $pr_data | jq -r '.title')"
+          echo $TITLE
+          gh pr edit  ${{ github.ref_name }} \
+            -t "【Mycalinksステージング反映】 ${{ steps.check_pr.outputs.message }}"
+
+          gh pr comment --body "
+          @coderabbitai
+          このPRで「実装した機能/修正」と「影響範囲」をあらためてこのPRの本文を直接編集して、該当見出し部分に記載してください。
+          本文へ追記するかどうかの確認は取らず、すぐに編集してしまって大丈夫です
+          すでに記載されているものを上書きする形にしてください。
+          なお、以下の条件に従って、箇条書きで記載してください
+
+          ＝実装した機能/修正＝
+          お客さんに伝えるメッセージであるため、表向きではわからないコードリファクタリングや軽微な修正などは除いてください
+          表向きでこのサービスを使った時に、人が「変わった」と感じる部分を要約してください
+          また、まとめるときはどの分野のどの機能/修正なのか、マークダウンのリストのネスト構造を活用しながらわかりやすく記載してください
+          分野というのは「UI」「バックエンド」などの開発分野ではなく、「販売機能」「商品作成機能」などのサービス自体の機能の分野のことです
+
+          ＝影響範囲＝
+          このPRで変更されたバックエンド側のサービスクラスやDB構造などを考慮しつつ、そのロジックに関連しているAPIなどを判断して、
+          そのAPIを利用している表向きでの機能を、お客さんにわかる形で記載してください
+          お客さんはこのメッセージを元に、バグがないか自分の手で触って動作確認します。
+          また、まとめるときはどの分野に影響が出るのか、マークダウンのリストのネスト構造を活用しながらわかりやすく記載してください
+          分野というのは「UI」「バックエンド」などの開発分野ではなく、「販売機能」「商品作成機能」などのサービス自体の機能の分野のことです
+          "

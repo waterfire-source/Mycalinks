@@ -1,0 +1,524 @@
+//EC関連（DB自体分けるという手もあったが、POSとかなり密なサービスとなっているので同DBにしちゃう）
+
+//ストアごとのECの設定 このモデルはECの設定をしようとした時に作られる
+model Ec_Setting {
+
+  store_id      Int @id  @db.UnsignedInt()
+  store         Store    @relation(fields: [store_id], references: [id], onDelete: Cascade) 
+
+  //20250618: 以下2つは機能削減に際して一旦無効になった
+  auto_listing  Boolean @default(false) @db.UnsignedTinyInt() //自動出品（新規在庫が増えた時に自動でECに出品する）
+  auto_stocking  Boolean @default(false) @db.UnsignedTinyInt() //自動在庫補充（在庫数が増えた時にPOSでの最低在庫数が確保できている場合、その分ECに補充するかどうか）
+
+
+  auto_sell_price_adjustment Int @default(100) //EC出品価格自動調整
+  price_adjustment_round_rank  Int @default(1) //ECでの丸め方
+  price_adjustment_round_rule RoundRule @default(UP) //デフォルトでは桁は動かさない
+  reserved_stock_number Int @default(0) //オフライン販売用に押さえておく最低在庫数
+  enable_same_day_shipping  Boolean @default(false) @db.UnsignedTinyInt() //即日発送
+  same_day_limit_hour Int? //即日発送をする時、期限の時間
+  shipping_days Int? //発送までにかかる営業日数
+  closed_day String @default("土,日") //定休曜日 カンマ区切り
+  free_shipping_price Int? //送料無料にする価格
+  delayed_payment_method String  @default("CONVENIENCE_STORE,BANK,CASH_ON_DELIVERY") //ECで許可する非即時決済方法 カンマ区切り
+  order_change_request_deadline_days_when_missing_item Int? //欠品連絡後の注文変更期限（日）
+
+  notification_email String? //ECの通知を受け取るメールアドレス カンマ区切り
+
+  commission_rate Int @default(11) //手数料率 デフォルトは11% お店側からは変えられない
+
+  //以下お茶の子
+  ochanoko_email String? @unique /// @zod.string.describe('おちゃのこで登録しているmail address')
+  ochanoko_account_id String? @unique /// @zod.string.describe('おちゃのこで登録しているアカウントID')
+  ochanoko_password String? /// @zod.string.describe('おちゃのこで登録しているpassword')
+  //本当は暗号化したものを保管した方が良い
+  ochanoko_api_token String? @db.Text /// @zod.string.describe('おちゃのこで登録しているapi token')
+  
+  //以下Shopify
+  shopify_shop_domain String? @unique @db.VarChar(50) /// @zod.string.describe('ShopifyのストアID')
+  shopify_access_token String? //Shopifyのアクセストークン
+  shopify_location_id String? @unique @db.VarChar(50) //Shopifyの店舗ID
+
+}
+
+//モールに表示する 店舗詳細
+model Ec_About_Us {
+  store_id Int @id @db.UnsignedInt()
+  store Store @relation(fields: [store_id], references: [id], onDelete: Cascade)
+
+  shop_pr String? @db.Text() /// @zod.string.describe('PR文')
+  images Json @default("[]")
+  about_shipping String? @db.Text() /// @zod.string.describe('配送についての説明')
+  about_shipping_fee String? @db.Text() /// @zod.string.describe('配送料についての説明')
+  cancel_policy String? @db.Text() /// @zod.string.describe('キャンセルポリシー')
+  return_policy String? @db.Text() /// @zod.string.describe('返品ポリシー')
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //作成日時
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0) //更新日時
+}
+
+//オーダー自体のステータス
+enum EcOrderStatus {
+  DRAFT //下書き
+
+  //以下、注文確定済み
+  UNPAID //未入金や3Dセキュア中など
+  PAID //入金済み
+
+  COMPLETED //すべて発送済み
+
+  //キャンセルとかはストアごとにやるため、Orderごとには保持しない
+}
+
+//支払い方法
+enum EcPaymentMethod {
+  CARD //GMOカード決済（即時決済）
+  PAYPAY //GMOのPayPay
+
+  //以下、非即時決済
+
+  CASH_ON_DELIVERY //代引き
+  CONVENIENCE_STORE //コンビニ
+  BANK //銀行振込
+}
+
+//ECのプラットフォーム
+enum EcPlatform {
+  MYCALINKS
+  OCHANOKO
+  SHOPIFY
+}
+
+//ECの注文（ストアごとの取引履歴とはまた別に管理する）
+model Ec_Order {
+  id                Int   @db.UnsignedInt()   @id @default(autoincrement())
+  external_ec_id String? //外部EC上でのID shopifyの場合はgid
+  @@index([platform,external_ec_id])
+
+  //UUID v7で作ったオーダーIDが入る 顧客側はこれを指定してカートを更新する
+  code String @db.VarChar(32) @unique
+
+  platform EcPlatform @default(MYCALINKS) //どのプラットフォームでの注文なのか
+
+  status EcOrderStatus @default(DRAFT)
+  payment_method EcPaymentMethod? //下書き時点ではnullでOK 外部ECの場合もnull
+  payment_method_display_name String? //支払い方法の表示名（外部ECの場合はここに入る）
+  payment_info Json? //コンビニ支払い、銀行振込などで必要な情報 jsonで保持
+
+  myca_user_id Int? //Mycaアプリ上でのユーザーID  下書き時点ではnullでOK 外部ECでもnull
+  @@index([myca_user_id])
+
+  //customer情報だけ別テーブルに切り分けても良いかも
+  customer_name String? //お客様名
+  customer_email String? //お客様Eメール
+  customer_phone String? //お客様電話番号
+  customer_name_ruby String? //お客様名（ふりがな）
+
+  shipping_address String? @db.VarChar(100) //わんちゃん郵便番号とか番地とかで分けるかも
+  display_shipping_address String? @db.VarChar(100) //ストア表示用の住所 住所を非表示モードにしてた場合はここに入らない様にする
+
+  shipping_address_prefecture String? @db.VarChar(20) //県だけとりあえず分離（配送の件で使うため）
+
+  customer_address_info_json Json? //住所とかをJSON化したもの 今後はこっちを使っていきたい
+
+  shipping_total_fee Int @default(0) //合計送料
+  total_price Int //合計価格（お客さんが支払う必要がある価格）
+  cart_stores Ec_Order_Cart_Store[] //カート内容（ストアごと）
+  payments Ec_Order_Payment[] //返金なども行われることを加味して配列として支払い情報を持たせる
+  description String?
+
+  wish_list_id Int? @db.UnsignedInt() //ほしい物リストからの購入だった場合
+  wish_list Ec_Wish_List? @relation(fields: [wish_list_id], references: [id], onDelete: Cascade)
+
+
+  ordered_at DateTime? @db.Timestamp(0) //受注日時
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //作成日時
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  //以下、使わないため廃止
+  receipt_url String? //レシートを発行したときにここにURLが入る
+
+}
+
+
+enum EcPaymentService {
+  GMO //GMO
+  ORIGINAL //独自（代引きなど）
+
+  OCHANOKO //おちゃのこ
+  SHOPIFY //Shopify
+}
+
+enum EcPaymentStatus {
+  PAYING //支払い中
+  COMPLETED //支払い完了
+  CANCELED //結局支払わなかった時など
+}
+
+//ECの支払い
+model Ec_Order_Payment {
+  id             Int       @db.UnsignedInt()       @id @default(autoincrement())
+  order_id Int       @db.UnsignedInt()  
+  order Ec_Order @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  store_id  Int? @db.UnsignedInt() //特定のストアIDを紐づけたい場合（特定のストア内でのキャンセル、欠品報告による返金など）
+  order_store Ec_Order_Cart_Store? @relation(fields: [order_id, store_id], references: [order_id, store_id], onDelete: Cascade)
+  mode PaymentMode @default(pay) //支払い or 返金
+  service EcPaymentService
+  method String? //支払い方法をここにも
+  source_event_json Json? //Gmoなどで受けたwebhookのイベントオブジェクトなどを格納
+  payment_info_json Json? //支払い情報を格納（コンビニ、銀行振込み用）
+  source_id String? //紐づいているIDなど
+  total_amount Int //Mycaにプラスになる支払いは正の数、マイナスになる支払いは負の数
+  status EcPaymentStatus @default(PAYING)
+
+  @@index([mode, service, status, source_id, order_id])
+
+  gmo_credit_card_id Int? @db.UnsignedInt() //GMOのカードID
+  gmo_credit_card Gmo_Credit_Card? @relation(fields: [gmo_credit_card_id], references: [id], onDelete: Cascade)
+
+  //カードだったとき
+  card__card_brand String? //VISAなど
+  card__card_type  String? //CREDITなど
+  card__exp_month  Int? //有効月
+  card__exp_year   Int? //有効年
+  card__last_4     String? //カードの下四桁
+
+  description String? //この決済についての説明をシステムから入れる時用
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //作成日時
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+enum EcOrderCartStoreStatus {
+  DRAFT //下書き状態 必ず遷移
+
+  //以下、注文確定された後
+  UNPAID //未入金
+  PREPARE_FOR_SHIPPING //発送準備待ち=支払い完了 必ず遷移
+  // PROCESSING_MISSING_ITEM //欠品連絡中 このステータスは必要無くなった
+  WAIT_FOR_SHIPPING //発送待機中 必ず遷移
+  COMPLETED //取引完了 = 発送完了 必ず遷移
+  CANCELED //キャンセル済み
+}
+
+enum EcShippingCompany {
+  SAGAWA
+  KURONEKO
+  YUBIN
+  OTHER //その他
+}
+
+//ECオーダーのカートのストアごとまとめ
+model Ec_Order_Cart_Store {
+  order_id Int  @db.UnsignedInt()
+  order    Ec_Order @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  store_id Int @db.UnsignedInt()
+  code String @db.VarChar(30) @unique //オーダーのカートのストアごとのコード
+  store               Store   @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  status EcOrderCartStoreStatus @default(DRAFT) //ストアごとのステータス
+  read   Boolean  @default(false) @db.UnsignedTinyInt() //このオーダーを既読したかどうか
+
+  shipping_method_id Int?   @db.UnsignedInt() //配送方法は下書き時点ではオプショナル
+  shipping_method    Shipping_Method?     @relation(fields: [shipping_method_id], references: [id], onDelete: Cascade)
+  shipping_method_display_name String? //配送方法の表示名
+  shipping_tracking_code String? //追跡番号
+  shipping_company EcShippingCompany? //運送会社
+  shipping_company_display_name String? //運送会社の表示名（外部EC）
+  shipping_fee Int @default(0) //送料
+  wish_list_shipping_fee Int? //ほしい物リストからの購入だった場合、Mycaへの手数料がかかる場合（匿名配送）に1000円が入る
+  total_price Int //ストアごとのtotalも一応算出（送料込み） こういう値は欠品報告などで注文内容が変わった時に変わる　キャンセル時は変わらない形
+  //total_priceにはMycaへの発送の手数料（1000円）も含まれる形
+
+  description String?
+
+  receipt_url String? ///@zod.string.describe('receiptを発行したときにここにURLが入る')
+  receipt_customer_name String? ///@zod.string.describe('receiptの宛名名 一度だけセットすることができる')
+
+  delivery_note_url String? ///@zod.string.describe('納品書を発行したときにここにURLが入る')
+
+  finished_at DateTime? @db.Timestamp(0) ///@zod.date.describe('発送したりキャンセルした日時')
+
+  products Ec_Order_Cart_Store_Product[]
+  store_related_payments Ec_Order_Payment[] //あんまアクセスすることはないため変な名前にしておく
+  contact Ec_Order_Cart_Store_Contact?
+  message_centers Ec_Message_Center[]
+
+  @@id([order_id, store_id])
+  @@index([store_id, finished_at])
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //作成日時
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+enum EcOrderContactStatus {
+  UNREAD //未読
+  ADDRESSING //対応中
+  SOLVED //解決済み
+}
+
+//ECオーダーのストアごとのお問い合わせ
+model Ec_Order_Cart_Store_Contact {
+  id Int @db.UnsignedInt() @id @default(autoincrement()) //メッセージ自体のID
+
+  last_sent_at DateTime? @db.Timestamp(0) //最後にお問い合わせのメッセージを送信した時間
+  status EcOrderContactStatus @default(UNREAD) //お問い合わせのステータス（お店向け）
+
+  order_id Int @db.UnsignedInt()
+  store_id Int @db.UnsignedInt()
+  @@unique([order_id, store_id])
+  order_store Ec_Order_Cart_Store @relation(fields: [order_id, store_id], references: [order_id, store_id], onDelete: Cascade)
+
+  kind String //お問い合わせの種類
+  title String //件名（返信モードの時は基本的に固定）
+
+  myca_user_id Int //スレッドを作成したMycaアプリのユーザーID
+  myca_user_last_read_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //Mycaアプリ上で最後に読み込んだ時間 これを使って既読など判断
+  
+  messages Ec_Order_Cart_Store_Contact_Message[]
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //作成日時
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0) //更新日時
+
+}
+
+model Ec_Order_Cart_Store_Contact_Message {
+  id Int @db.UnsignedInt() @id @default(autoincrement()) //メッセージ自体のID
+  ec_order_contact_id Int @db.UnsignedInt()
+  ec_order_contact Ec_Order_Cart_Store_Contact @relation(fields: [ec_order_contact_id], references: [id], onDelete: Cascade)
+  myca_user_id Int? //Mycaアプリ上でのユーザーID アプリユーザーからの送信だったらこれを指定する
+  staff_account_id Int? @db.UnsignedInt() //送信したアカウントのID
+  staff_account Account? @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+
+  content String @db.Text() //メッセージ内容
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //作成日時
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0) //更新日時
+  // replies Ec_Order_Cart_Store_Contact[] @relation("replyRelation")
+}
+
+//ECオーダーのカート内容ストアごと
+model Ec_Order_Cart_Store_Product {
+  id                Int   @db.UnsignedInt()   @id @default(autoincrement())
+
+  order_id Int  @db.UnsignedInt()
+  store_id  Int @db.UnsignedInt()
+  order_store Ec_Order_Cart_Store @relation(fields: [order_id, store_id], references: [order_id, store_id], onDelete: Cascade)
+
+  product_id     Int  @db.UnsignedInt()
+  product        Product     @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  total_unit_price Int //最終的に単価は何円なのか
+  original_item_count Int //注文時の個数
+  item_count Int //実際の個数 originalと異なる場合、欠品があったことになる
+
+  wholesale_total_price Int? //仕入れ値の合計額
+
+  description String?
+
+  wish_list_product_id Int? @db.UnsignedInt() //ほしい物リスト上での該当商品ID リスト外商品だった場合はnullでOK
+  wish_list_product Ec_Wish_List_Product? @relation(fields: [wish_list_product_id], references: [id], onDelete: Cascade)
+
+}
+
+//欠品についてはもう少し詰めたい
+
+//ストアごとに決められる、配送方法（おそらくデフォルトでいくつか入れる）
+model Shipping_Method {
+  id                Int   @db.UnsignedInt()   @id @default(autoincrement())
+  store_id          Int  @db.UnsignedInt()
+  store             Store     @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  display_name String //配送方法名
+  enabled_tracking  Boolean  @default(false) @db.UnsignedTinyInt() //荷物追跡
+  // is_default  Boolean  @default(false) @db.UnsignedTinyInt() //デフォルトの配送方法か否か //これなくなった
+  enabled_cash_on_delivery  Boolean  @default(false) @db.UnsignedTinyInt()  //代引きを有効にするかどうか
+
+  //他にも追加する
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  deleted  Boolean  @default(false) @db.UnsignedTinyInt() //論理削除
+  @@index([deleted])
+
+  is_store_pickup Boolean @default(false) @db.UnsignedTinyInt() //この方法が店舗受け取りかどうか 店舗受け取りの場合、全国一律0円じゃないといけない
+  order_number Int @default(0) //並び順 若い方から優先的に表示される
+
+  description String?
+
+  ec_cart_stores Ec_Order_Cart_Store[]
+  regions Shipping_Region[] //地域別の配送方法指定
+  weights Shipping_Weight[] //重さ別の指定（こちらが定義されている場合、サイズ別で配送料金を指定していることになる）
+
+  //以下、使わないフィールド
+  is_all_in_one_fee  Boolean  @default(false) @db.UnsignedTinyInt() //まとめて1点として送料を計算するかどうか
+
+}
+
+//地域ごとの送料
+model Shipping_Region {
+  id                Int   @db.UnsignedInt()   @id @default(autoincrement())
+
+  shipping_id Int @db.UnsignedInt()
+  shipping Shipping_Method     @relation(fields: [shipping_id], references: [id], onDelete: Cascade)
+
+  shipping_weight_id Int?  @db.UnsignedInt() //サイズ別で料金を指定している中で地域別の料金を指定したときのID（この時でもshipping_idとの直接的なリレーションは組む）
+  shipping_weight Shipping_Weight? @relation(fields: [shipping_weight_id], references: [id], onDelete: Cascade)
+
+  region_handle String //地域の名前 「全国一律」や「東北エリア一律」、「神奈川県」など、決められたフォーマットで入力する このフォーマットは定数としてサーバーで保持したい
+  @@index([region_handle])
+  @@unique([shipping_id, shipping_weight_id, region_handle])
+
+  //今の所display_nameとかは使わない
+
+  fee Int @db.UnsignedInt() //送料（税込）
+
+}
+
+//重量ごとの
+model Shipping_Weight {
+  id                Int   @db.UnsignedInt()   @id @default(autoincrement())
+
+  shipping_id Int @db.UnsignedInt()
+  shipping Shipping_Method     @relation(fields: [shipping_id], references: [id], onDelete: Cascade)
+
+  display_name String //サイズ名
+  weight_gte Int //重量制限開始ポイント
+  weight_lte Int //重量制限終了ポイント
+
+  regions Shipping_Region[] //最終的に地域別で料金を決定する
+  
+}
+
+//バナー位置
+enum EcBannerPlace {
+  TOP //上部
+  BOTTOM //下部
+}
+
+//ECのバナー
+model Ec_Banner {
+  id                Int   @db.UnsignedInt()   @id @default(autoincrement())
+  title String? //管理用の名前など
+  place EcBannerPlace //バナー位置
+  description String? //管理用
+  image_url String //画像URL
+  order_number Int @default(0) //並び順、小さい方が左側
+  url String? //飛ぶURL
+
+  //他にも追加するかも
+}
+
+//お客さんからのお問い合わせ（現在はEC用）
+
+enum ContactServiceKind {
+  EC //ECでのお問い合わせ
+}
+
+enum ClientKind {
+  CUSTOMER //お客さん
+  STORE //店舗側
+}
+
+enum ContactAccountKind {
+  APP //アプリユーザー
+}
+model Contact {
+
+  id                Int   @db.UnsignedInt()   @id @default(autoincrement())
+  service_kind ContactServiceKind //どこでのお問い合わせか
+  client_kind ClientKind //誰からのお問い合わせか
+  account_id Int? //アカウントIDがある場合それ
+  account_kind ContactAccountKind? //アカウントの種類
+
+  kind String? //お問い合わせの種類（システム入力）
+  content String @db.Text() //お問合せ本文
+  myca_item_id Int? //MycaアプリのアイテムID
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+}
+
+
+enum EcMessageCenterKind {
+  ORDER_CONTACT //注文お問い合わせ
+  MAIL //メールで来ているものの転写
+}
+
+//ECのメッセージセンターのメッセージ
+model Ec_Message_Center {
+  id Int @db.UnsignedInt() @id @default(autoincrement())
+  myca_user_id Int /// @zod.number.describe('Myca上でのUser ID')
+  @@index([myca_user_id])
+
+  order_id Int? @db.UnsignedInt()
+  store_id Int? @db.UnsignedInt()
+  order_store Ec_Order_Cart_Store? @relation(fields: [order_id, store_id], references: [order_id, store_id], onDelete: Cascade)
+
+  read_at DateTime? @db.Timestamp(0) /// @zod.date.describe('既読をつけた時間')
+  kind EcMessageCenterKind
+
+  title String /// @zod.string.describe('タイトル')
+  content String @db.Text() /// @zod.string.describe('内容')
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe('送信日時')
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+}
+
+//ほしい物リスト
+enum EcWishListStatus {
+  PRIVATE //非公開
+  PUBLIC //公開
+  DELETED //削除
+}
+
+model Ec_Wish_List {
+  id Int @db.UnsignedInt() @id @default(autoincrement())
+  title String /// @zod.string.describe('リストの名前')
+  wisher_display_name String /// @zod.string.describe('ほしい物リストの所有者の表示名')
+  myca_user_id Int? ///@zod.number.describe('ほしい物リスト作成者')
+  @@index([myca_user_id])
+
+  area_public Boolean @default(false) @db.UnsignedTinyInt() //エリアを公開するかどうか trueだったら公開であるため、都道府県とかが表示される
+  //都道府県とか住所はMycaのアプリAPIを叩いて随時取得する
+  shipping_address_public Boolean @default(false) @db.UnsignedTinyInt() //配送先住所を公開するかどうか falseだったらMycaに一旦発送する形になる
+  allow_other_products Boolean @default(false) @db.UnsignedTinyInt() //リスト外商品を追加できるかどうか
+  bought_count_delay Boolean @default(false) @db.UnsignedTinyInt() //購入した時の購入数反映を7日間遅らせるかどうか
+  public_description String? //公開する時の説明
+  status EcWishListStatus @default(PRIVATE) //ステータス
+
+  products Ec_Wish_List_Product[] //リスト内の商品
+  orders Ec_Order[] //ほしい物リストからの購入
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe('作成日時')
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+enum EcWishListProductStatus {
+  PUBLIC //公開 買ってもらえる状態
+  PRIVATE //非公開 基本的には、希望数に達した時 買ってもらえない状態
+  DELETED //削除された状態
+}
+
+//ほしい物リスト内の商品
+model Ec_Wish_List_Product {
+  id Int @db.UnsignedInt() @id @default(autoincrement())
+  wish_list_id Int @db.UnsignedInt()
+  wish_list Ec_Wish_List @relation(fields: [wish_list_id], references: [id], onDelete: Cascade)
+
+  myca_item_id Int ///@zod.number.describe('MycaのアイテムID')
+  myca_item Myca_Item @relation(fields: [myca_item_id], references: [myca_item_id], onDelete: Cascade)
+
+  condition_option_handle ConditionOptionHandle? // 状態指定 nullだったら問わず
+  store_id Int? @db.UnsignedInt() //店舗指定 nullだったら問わず
+  store Store? @relation(fields: [store_id], references: [id], onDelete: Cascade)
+
+  status EcWishListProductStatus @default(PUBLIC) //ステータス
+
+  item_count Int ///@zod.number.describe('希望数 -1だったら無限')
+  bought_count Int @default(0) ///@zod.number.describe('購入された数 これがdelayする')
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe('作成日時')
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  last_bought_at DateTime? @db.Timestamp(0) /// @zod.date.describe('最後に購入された日時')
+
+  order_cart_store_products Ec_Order_Cart_Store_Product[] //ほしい物リストからの購入だった場合
+}

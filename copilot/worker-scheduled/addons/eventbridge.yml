@@ -1,0 +1,242 @@
+Parameters:
+  App:
+    Type: String
+  Env:
+    Type: String
+  Name:
+    Type: String
+
+# 条件定義
+Conditions:
+  # ステージングと本番環境のみ
+  IsAllowedEnvironment: !Or
+    - !Equals [!Ref Env, 'staging']
+    - !Equals [!Ref Env, 'production']
+
+# エンドポイントURLのマッピング
+Mappings:
+  ScheduleConfig:
+    PayContractSubscription:
+      description: '契約定期支払い処理'
+      schedule: 'cron(15 18 * * ? *)' # UTC 18:15 (JST 03:15)
+    UpdateBundleItemStatus:
+      description: 'バンドル商品ステータス更新'
+      schedule: 'cron(10 16 * * ? *)' # UTC 16:10 (JST 01:10)
+    UpdateSaleStatus:
+      description: 'セールステータス更新等'
+      schedule: 'cron(*/10 * * * ? *)' # 10分おき
+    UpdateSetDealStatus:
+      description: 'セット販売のステータス更新'
+      schedule: 'cron(30 16 * * ? *)' # UTC 16:30 (JST 01:30)
+    UpdateAnnouncementStatus:
+      description: 'お知らせのステータス更新'
+      schedule: 'cron(5 15 * * ? *)' # UTC 15:05 (JST 00:05)
+
+Resources:
+  EventBridgeRole:
+    Condition: IsAllowedEnvironment
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AllowSQSSend
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'sqs:SendMessage'
+                  - 'scheduler:*'
+                  - 'events:*'
+                  - 'kms:Decrypt'
+                  - 'kms:Encrypt'
+                  - 'kms:GenerateDataKey'
+                Resource: '*'
+
+  # セールステータス更新等
+  UpdateSaleStatusRule:
+    Type: AWS::Events::Rule
+    Condition: IsAllowedEnvironment
+    Properties:
+      Name: !Sub '${App}-${Env}-UpdateSaleStatusRule'
+      Description: !FindInMap [ScheduleConfig, UpdateSaleStatus, description]
+      ScheduleExpression:
+        !FindInMap [ScheduleConfig, UpdateSaleStatus, schedule]
+      State: ENABLED
+      Targets:
+        - Id: UpdateSaleStatusTarget
+          Arn:
+            Fn::ImportValue: !Sub '${App}-${Env}-${Name}-EventsQueueARN'
+          RoleArn: !GetAtt EventBridgeRole.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 3
+            MaximumEventAgeInSeconds: 3600
+          SqsParameters:
+            MessageGroupId: 'updateSaleStatus'
+          Input: |
+            {
+              "targetWorker": "scheduled",
+              "kind": "updateSaleStatus",
+              "body": [{
+                "task_item_id": 1,
+                "data": {}
+              }],
+              "resources": {},
+              "fromProcessId": 1,
+              "ids": {},
+              "chunkId": 1,
+              "fromSystem": true
+            }
+
+  # バンドル商品のステータス更新
+  UpdateBundleItemStatusRule:
+    Type: AWS::Events::Rule
+    Condition: IsAllowedEnvironment
+    Properties:
+      Name: !Sub '${App}-${Env}-UpdateBundleItemStatusRule'
+      Description:
+        !FindInMap [ScheduleConfig, UpdateBundleItemStatus, description]
+      ScheduleExpression:
+        !FindInMap [ScheduleConfig, UpdateBundleItemStatus, schedule]
+      State: ENABLED
+      Targets:
+        - Id: UpdateBundleItemStatusTarget
+          Arn:
+            Fn::ImportValue: !Sub '${App}-${Env}-${Name}-EventsQueueARN'
+          RoleArn: !GetAtt EventBridgeRole.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 3
+            MaximumEventAgeInSeconds: 3600
+          SqsParameters:
+            MessageGroupId: 'updateBundleItemStatus'
+          Input: |
+            {
+              "targetWorker": "scheduled",
+              "kind": "updateBundleItemStatus",
+              "body": [{
+                "task_item_id": 1,
+                "data": {}
+              }],
+              "resources": {},
+              "fromProcessId": 1,
+              "ids": {},
+              "chunkId": 1,
+              "fromSystem": true
+            }
+
+  # セット販売のステータス更新
+  UpdateSetDealStatusRule:
+    Type: AWS::Events::Rule
+    Condition: IsAllowedEnvironment
+    Properties:
+      Name: !Sub '${App}-${Env}-UpdateSetDealStatusRule'
+      Description: !FindInMap [ScheduleConfig, UpdateSetDealStatus, description]
+      ScheduleExpression:
+        !FindInMap [ScheduleConfig, UpdateBundleItemStatus, schedule]
+      State: ENABLED
+      Targets:
+        - Id: UpdateSetDealStatusTarget
+          Arn:
+            Fn::ImportValue: !Sub '${App}-${Env}-${Name}-EventsQueueARN'
+          RoleArn: !GetAtt EventBridgeRole.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 3
+            MaximumEventAgeInSeconds: 3600
+          SqsParameters:
+            MessageGroupId: 'updateSetDealStatus'
+          Input: |
+            {
+              "targetWorker": "scheduled",
+              "kind": "updateSetDealStatus",
+              "body": [{
+                "task_item_id": 1,
+                "data": {}
+              }],
+              "resources": {},
+              "fromProcessId": 1,
+              "ids": {},
+              "chunkId": 1,
+              "fromSystem": true
+            }
+
+  # 契約定期支払い
+  PayContractSubscriptionRule:
+    Type: AWS::Events::Rule
+    Condition: IsAllowedEnvironment
+    Properties:
+      Name: !Sub '${App}-${Env}-PayContractSubscriptionRule'
+      Description:
+        !FindInMap [ScheduleConfig, PayContractSubscription, description]
+      ScheduleExpression:
+        !FindInMap [ScheduleConfig, PayContractSubscription, schedule]
+      State: ENABLED
+      Targets:
+        - Id: PayContractSubscriptionTarget
+          Arn:
+            Fn::ImportValue: !Sub '${App}-${Env}-${Name}-EventsQueueARN'
+          RoleArn: !GetAtt EventBridgeRole.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 3
+            MaximumEventAgeInSeconds: 3600
+          SqsParameters:
+            MessageGroupId: 'payContractSubscription'
+          Input: |
+            {
+              "targetWorker": "scheduled",
+              "kind": "payContractSubscription",
+              "body": [{
+                "task_item_id": 1,
+                "data": {}
+              }],
+              "resources": {},
+              "fromProcessId": 1,
+              "ids": {},
+              "chunkId": 1,
+              "fromSystem": true
+            }
+
+  # お知らせのステータス更新
+  UpdateAnnouncementStatusRule:
+    Type: AWS::Events::Rule
+    Condition: IsAllowedEnvironment
+    Properties:
+      Name: !Sub '${App}-${Env}-UpdateAnnouncementStatusRule'
+      Description:
+        !FindInMap [ScheduleConfig, UpdateAnnouncementStatus, description]
+      ScheduleExpression:
+        !FindInMap [ScheduleConfig, UpdateAnnouncementStatus, schedule]
+      State: ENABLED
+      Targets:
+        - Id: UpdateAnnouncementStatusTarget
+          Arn:
+            Fn::ImportValue: !Sub '${App}-${Env}-${Name}-EventsQueueARN'
+          RoleArn: !GetAtt EventBridgeRole.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 3
+            MaximumEventAgeInSeconds: 3600
+          SqsParameters:
+            MessageGroupId: 'updateAnnouncementStatus'
+          Input: |
+            {
+              "targetWorker": "scheduled",
+              "kind": "updateAnnouncementStatus",
+              "body": [{
+                "task_item_id": 1,
+                "data": {}
+              }],
+              "resources": {},
+              "fromProcessId": 1,
+              "ids": {},
+              "chunkId": 1,
+              "fromSystem": true
+            }

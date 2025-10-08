@@ -1,0 +1,16 @@
+# 価格更新などで使う
+mutation updateVariant(
+  $productId: ID!
+  $variants: [ProductVariantsBulkInput!]!
+) {
+  productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+    productVariants {
+      id
+      price
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}

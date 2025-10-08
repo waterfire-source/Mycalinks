@@ -1,0 +1,11 @@
+{
+  "name": "function-python-api",
+  "version": "0.1.0",
+  "private": true,
+  "main": "app.py",
+  "scripts": {
+    "samBuild": "sam build",
+    "deploy:staging": "sam deploy --config-env staging",
+    "deploy:production": "sam deploy --config-env production"
+  }
+}

@@ -1,0 +1,27 @@
+generator client {
+  provider = "prisma-client-js"
+  // output        = "./generated/prisma-client" //Change output to custom path
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x", "debian-openssl-1.1.x"]
+  previewFeatures = ["prismaSchemaFolder","views"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_SERVER_URL")
+}
+
+generator zod {
+  provider     = "zod-prisma-types"
+  output     = "../../src/db/zod-generated"
+  createInputTypes = false
+  addIncludeType = false
+  addSelectType = false
+  useMultipleFiles = true
+  withComment = true
+  useTypeAssertions = true
+  // relationModel = true
+}
+
+//fulltextインデックスの設定やgenerated columnなどは手動でスクリプトに記載する形でマイグレーションしている
+//そのため、prismaの機能で一回マイグレーションをリセットしてしまうとそれらの情報が失われてしまうため、原則リセットはしない
+//また、マイグレーション履歴が増えるとあまりにも重いため定期的にマイグレーション履歴は消しつつ、0_initを作り直している

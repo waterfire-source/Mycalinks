@@ -1,0 +1,284 @@
+//過去のデータなどをDWH的に保存しておくためのテーブル
+//別DBに切り分けたい気持ちもある（redshiftなど）
+
+//スタースキーマ風に構築していく
+
+//POS取引の商品（販売の最小単位）ベースのファクトテーブル データ分析用
+//なお、全体割引などは含まれない形で保存しておく
+model Fact_Transaction_Product {
+  store_id Int @db.UnsignedInt() /// @zod.number.describe("店舗ID")
+  transaction_id Int @db.UnsignedInt() /// @zod.number.describe("取引ID")
+  product_id Int @db.UnsignedInt() /// @zod.number.describe("商品ID")
+  @@index([transaction_id, product_id])
+
+  @@id([store_id, target_day, cart_id])
+
+  //cartの情報
+  cart_id Int @db.UnsignedInt() /// @zod.number.describe("カートID")
+  is_return Boolean @default(false)
+  item_count Int /// @zod.number.describe("買取、購入個数")
+  sale_id Int? @db.UnsignedInt() /// @zod.number.describe("紐づけられているSaleのID")
+  sale_display_name String? /// @zod.string.describe("sale名")
+  sale_discount_price Int? /// @zod.number.describe("saleでの割引額")
+  original_unit_price Int? /// @zod.number.describe("DataBaseに保存されていた、この在庫のその時点での単価")
+  unit_price Int /// @zod.number.describe("もともとの単価 値引き額は考慮しない")
+  wholesale_total_price Int? /// @zod.number.describe("仕入れ値の合計額（販売取引用）")
+  discount_price Int? /// @zod.number.describe("手動個別値引き額")
+  total_discount_price Int? /// @zod.number.describe("合計の値引き額（単価） discount_price + sale_discount_price")
+  total_unit_price Int? /// @zod.number.describe("値引きなどを考慮した合計の単価（1つあたり） unit_price + total_discount_price")
+
+  //productの情報
+  product_display_name String /// @zod.string.describe("商品名")
+  condition_option_id Int @db.UnsignedInt() /// @zod.number.describe("状態のID")
+  condition_option_display_name String /// @zod.string.describe("状態の表示名")
+  @@index([condition_option_id])
+  @@index([condition_option_display_name])
+
+  //itemの情報
+  item_id Int @db.UnsignedInt() /// @zod.number.describe("商品マスタID")
+  myca_item_id Int? /// @zod.number.describe("Mycaの商品マスタID")
+  category_id Int @db.UnsignedInt() /// @zod.number.describe("カテゴリID")
+  category_display_name String /// @zod.string.describe("カテゴリ名")
+  @@index([category_id])
+  @@index([category_display_name])
+  genre_id Int? @db.UnsignedInt() /// @zod.number.describe("ジャンルID")
+  genre_display_name String? /// @zod.string.describe("ジャンル名")
+  @@index([genre_id])
+  @@index([genre_display_name])
+  specialty_id Int? @db.UnsignedInt() /// @zod.number.describe("スペシャリティID")
+  specialty_display_name String? /// @zod.string.describe("スペシャリティ名")
+  management_number String? /// @zod.string.describe("管理番号 鑑定番号")
+  @@index([specialty_id])
+  @@index([specialty_display_name])
+  expansion String? /// @zod.string.describe("エキスパンション")
+  rarity String? /// @zod.string.describe("レアリティ")
+  cardnumber String? /// @zod.string.describe("カード番号")
+
+  //transactionの情報
+  transaction_kind SummaryTransactionKind
+  @@index([transaction_kind])
+
+  tax_kind String /// @zod.string.describe("税種類")
+  payment_method String /// @zod.string.describe("支払い方法")
+
+  transaction_created_at DateTime @db.Timestamp(0) /// @zod.date.describe("取引作成日時")
+  transaction_finished_at DateTime @db.Timestamp(0) /// @zod.date.describe("取引完了日時")
+
+  target_day                 DateTime     @db.Date() /// @zod.date.describe("このデータの日付")         
+  @@index([store_id])
+}
+
+//取引の顧客ディメンション
+model Dim_Transaction_Customer {
+  transaction_id Int @db.UnsignedInt() @id /// @zod.number.describe("取引ID")
+
+  customer_id Int @db.UnsignedInt() /// @zod.number.describe("顧客ID")
+
+  @@index([transaction_id, customer_id])
+
+  full_name String? /// @zod.string.describe("顧客名")
+  address String? /// @zod.string.describe("顧客住所（すべて一つにまとめる）")
+  career String? /// @zod.string.describe("顧客職業")
+  age Int? /// @zod.number.describe("顧客年齢")
+  id_kind String? /// @zod.string.describe("身分証の種類")
+  id_number String? /// @zod.string.describe("身分証の番号")
+}
+
+//日毎の商品ファクトテーブル どちらかというと販売用 在庫があるもののみ集計する
+model Fact_Daily_Product {
+  store_id Int @db.UnsignedInt() /// @zod.number.describe("店舗ID")
+  target_day DateTime @db.Date() /// @zod.date.describe("対象の日")
+  @@index([store_id])
+  @@id([store_id, target_day, product_id])
+  
+  @@index([product_id])
+  product_id Int @db.UnsignedInt() /// @zod.number.describe("商品ID")
+  
+  //productの情報
+  product_display_name String /// @zod.string.describe("商品名")
+  condition_option_id Int @db.UnsignedInt() /// @zod.number.describe("状態のID")
+  condition_option_display_name String /// @zod.string.describe("状態の表示名")
+  @@index([condition_option_id])
+  @@index([condition_option_display_name])
+
+  stock_number Int /// @zod.number.describe("この日の最後の時点での在庫数")
+  actual_sell_price Int /// @zod.number.describe("この日の実際の販売額")
+  actual_buy_price Int /// @zod.number.describe("この日の実際の買取額")
+  total_wholesale_price BigInt /// @zod.bigint.describe("この日の合計仕入れ額（原価）")
+  total_sale_price BigInt /// @zod.bigint.describe("この日の売価高")
+  average_wholesale_price Int /// @zod.number.describe("この日の平均仕入れ額（原価）")
+  minimum_wholesale_price Int /// @zod.number.describe("この日の最低仕入れ額（原価）")
+  maximum_wholesale_price Int /// @zod.number.describe("この日の最高仕入れ額（原価）")
+
+  @@index([stock_number])
+  @@index([actual_sell_price])
+  @@index([actual_buy_price])
+
+  //itemの情報
+  item_id Int @db.UnsignedInt() /// @zod.number.describe("商品マスタID")
+  myca_item_id Int? /// @zod.number.describe("Mycaの商品マスタID")
+  category_id Int @db.UnsignedInt() /// @zod.number.describe("カテゴリID")
+  category_display_name String /// @zod.string.describe("カテゴリ名")
+  @@index([category_id])
+  @@index([category_display_name])
+  genre_id Int? @db.UnsignedInt() /// @zod.number.describe("ジャンルID")
+  genre_display_name String? /// @zod.string.describe("ジャンル名")
+  @@index([genre_id])
+  @@index([genre_display_name])
+  specialty_id Int? @db.UnsignedInt() /// @zod.number.describe("スペシャリティID")
+  specialty_display_name String? /// @zod.string.describe("スペシャリティ名")
+  @@index([specialty_id])
+  @@index([specialty_display_name])
+  management_number String? /// @zod.string.describe("管理番号 鑑定番号")
+  expansion String? /// @zod.string.describe("エキスパンション")
+  rarity String? /// @zod.string.describe("レアリティ")
+  cardnumber String? /// @zod.string.describe("カード番号")
+
+
+
+}
+
+
+//まとめ
+enum SummaryTransactionKind {
+  SELL
+  BUY
+}
+
+
+model Summary_Daily_Transaction {
+  store_id Int @db.UnsignedInt() /// @zod.number.describe("店舗ID")
+  kind SummaryTransactionKind
+  target_day DateTime @db.Date() /// @zod.date.describe("対象の日")
+  @@index([store_id])
+  @@id([store_id,target_day, kind])
+
+  price Int /// @zod.number.describe("総額")
+  count Int /// @zod.number.describe("取引数")
+  return_price Int /// @zod.number.describe("返品総額")
+  return_count Int /// @zod.number.describe("返品取引数")
+  item_count Int /// @zod.number.describe("商品数")
+  given_point Int /// @zod.number.describe("付与したポイント")
+  used_point Int /// @zod.number.describe("使用したポイント sellのみ")
+  sale_discount_price Int /// @zod.number.describe("saleでの割引合計額")
+  discount_price Int /// @zod.number.describe("手動全体割引額")
+  coupon_discount_price Int @default(0) /// @zod.number.describe("coupon利用によって割り引かれた額 原則負の数 買取の場合正の数になる")
+  product_discount_price Int /// @zod.number.describe("手動個別割引額")
+  product_total_discount_price Int /// @zod.number.describe("個別割引合計額")
+  set_deal_discount_price Int /// @zod.number.describe("セット販売での割引合計額 sellのみ")
+  total_discount_price Int /// @zod.number.describe("全体割引合計額")
+  wholesale_price Int /// @zod.number.describe("合計仕入れ額（原価）")
+  loss_wholesale_price Int @default(0) /// @zod.number.describe("ロスで失った仕入れ値 取引のところから外すかも")
+
+  // 総合計全体割引は total_discount_price + product_total_discount_price
+
+  buy_assessed_price Int /// @zod.number.describe("買取査定額")
+  //generated column
+}
+
+//在庫関連のサマリー
+model Summary_Daily_Product {
+  target_day DateTime @db.Date() /// @zod.date.describe("対象の日")
+  store_id Int @db.UnsignedInt() /// @zod.number.describe("店舗ID")
+  @@index([store_id])
+  @@id([store_id, target_day])
+
+  total_wholesale_price BigInt /// @zod.bigint.describe("合計仕入れ額（原価）")
+  total_sell_price BigInt /// @zod.bigint.describe("売価高")
+  total_stock_number Int /// @zod.number.describe("在庫数")
+}
+
+
+
+
+
+
+
+
+
+//以下、EC 発送まで完了or完全にキャンセルしたものが対象
+//Mycalinks Mallのみが対象
+
+model Fact_Ec_Order_Product {
+  store_id Int @db.UnsignedInt() /// @zod.number.describe("店舗ID")
+  order_id Int @db.UnsignedInt() /// @zod.number.describe("注文ID")
+  product_id Int @db.UnsignedInt() /// @zod.number.describe("商品ID")
+  @@index([order_id, product_id])
+
+  @@id([store_id, order_id, product_id])
+
+  //cartの情報
+  cart_id Int @db.UnsignedInt() /// @zod.number.describe("Ec_Order_Cart_Store_ProductのID")
+
+  item_count Int /// @zod.number.describe("最終的な個数")
+  original_item_count Int /// @zod.number.describe("注文時の個数")
+
+  wholesale_total_price Int? /// @zod.number.describe("仕入れ値の合計額（販売取引用）")
+  total_unit_price Int? /// @zod.number.describe("値引きなどを考慮した合計の単価（1つあたり） unit_price + total_discount_price")
+
+  //productの情報
+  product_display_name String /// @zod.string.describe("商品名")
+  condition_option_id Int @db.UnsignedInt() /// @zod.number.describe("状態のID")
+  condition_option_display_name String /// @zod.string.describe("状態の表示名")
+  condition_option_handle String /// @zod.string.describe("状態のハンドル")
+  @@index([condition_option_id])
+  @@index([condition_option_display_name])
+  @@index([condition_option_handle])
+
+  //itemの情報
+  item_id Int @db.UnsignedInt() /// @zod.number.describe("商品マスタID")
+  myca_item_id Int? /// @zod.number.describe("Mycaの商品マスタID")
+  category_id Int @db.UnsignedInt() /// @zod.number.describe("カテゴリID")
+  category_display_name String /// @zod.string.describe("カテゴリ名")
+  category_handle String /// @zod.string.describe("カテゴリのハンドル")
+  @@index([category_id])
+  @@index([category_display_name])
+  @@index([category_handle])
+  genre_id Int? @db.UnsignedInt() /// @zod.number.describe("ジャンルID")
+  genre_display_name String? /// @zod.string.describe("ジャンル名")
+  genre_handle String? /// @zod.string.describe("ジャンルのハンドル")
+  @@index([genre_id])
+  @@index([genre_display_name])
+  @@index([genre_handle])
+  specialty_id Int? @db.UnsignedInt() /// @zod.number.describe("スペシャリティID")
+  specialty_display_name String? /// @zod.string.describe("スペシャリティ名")
+  specialty_handle String? /// @zod.string.describe("スペシャリティのハンドル")
+  management_number String? /// @zod.string.describe("管理番号 鑑定番号")
+  @@index([specialty_id])
+  @@index([specialty_display_name])
+  expansion String? /// @zod.string.describe("エキスパンション")
+  rarity String? /// @zod.string.describe("レアリティ")
+  cardnumber String? /// @zod.string.describe("カード番号")
+
+  payment_method String /// @zod.string.describe("支払い方法")
+
+  order_created_at DateTime @db.Timestamp(0) /// @zod.date.describe("注文作成日時")
+  order_completed_at DateTime @db.Timestamp(0) /// @zod.date.describe("発送完了日時")
+
+  //わんちゃん送料の情報も入れる？
+
+  target_day                 DateTime     @db.Date() /// @zod.date.describe("このデータの日付")         
+  @@index([store_id])
+}
+
+//EC取引のまとめ
+model Summary_Daily_Ec_Order {
+  store_id Int @db.UnsignedInt() /// @zod.number.describe("店舗ID")
+  target_day DateTime @db.Date() /// @zod.date.describe("対象の日")
+  @@index([store_id])
+  @@id([store_id,target_day])
+
+  price Int /// @zod.number.describe("総売上 お客さんが払った額")
+  shipping_fee Int /// @zod.number.describe("送料合計")
+  commission_price Int /// @zod.number.describe("手数料合計")
+
+  completed_count Int /// @zod.number.describe("発送完了した注文の数")
+  canceled_count Int /// @zod.number.describe("完全にキャンセルした注文の数")
+  change_count Int /// @zod.number.describe("欠品報告数 発送完了したもののみ")
+
+  cancel_price Int /// @zod.number.describe("キャンセル総額")
+  change_price Int /// @zod.number.describe("欠品報告により失った総額")
+  item_count Int /// @zod.number.describe("商品数")
+  
+  wholesale_price Int /// @zod.number.describe("合計仕入れ額（原価）")
+}

@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: shopify webhook template
+
+Parameters:
+  App:
+    Type: String
+    Default: pos
+  Env:
+    Type: String
+    Default: staging
+
+Conditions:
+  IsStaging: !Equals [!Ref Env, 'staging']
+
+# [TODO] arn:aws:events:ap-northeast-1::event-source/aws.partner/shopify.com/268234981377/pos-connector-event-source-test
+# などのデータソースをもとにしたイベントルールをこのテンプレートで定義する
+
+Resources:
+  ShopifyWebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${App}-${Env}-ShopifyWebhookFunction
+      Runtime: nodejs22.x
+      CodeUri: ./
+      Handler: app.handler
+      Timeout: 30
+      Environment:
+        Variables:
+          EXTERNAL_EC_WORKER_QUEUE_URL:
+            Fn::If:
+              - IsStaging
+              - 'https://sqs.ap-northeast-1.amazonaws.com/502078855105/pos-staging-worker-external-ec-EventsQueue-GCQ01pHRIFjX.fifo'
+              - 'https://sqs.ap-northeast-1.amazonaws.com/502078855105/pos-production-worker-external-ec-EventsQueue-W79q3d5Qj7WN.fifo'
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - 'sqs:SendMessage'
+                - 'scheduler:*'
+                - 'events:*'
+                - 'kms:Decrypt'
+                - 'kms:Encrypt'
+                - 'kms:GenerateDataKey'
+              Resource: '*'
+
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2020
+        Sourcemap: true
+        EntryPoints:
+          - app.ts

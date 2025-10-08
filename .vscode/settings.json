@@ -1,0 +1,22 @@
+{
+  "cSpell.words": ["felica", "Myca", "Mycalinks", "Ochanoko", "paypay"],
+  "typescript.preferences.importModuleSpecifier": "non-relative",
+  "javascript.preferences.importModuleSpecifier": "non-relative",
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "better-comments.tags": [
+    {
+      "tag": "@zod",
+      "color": "#FF8C00",
+      "strikethrough": false,
+      "underline": false,
+      "backgroundColor": "transparent",
+      "bold": true,
+      "italic": false
+    }
+  ],
+  "cfnLint.ignoreRules": ["E3691"]
+}

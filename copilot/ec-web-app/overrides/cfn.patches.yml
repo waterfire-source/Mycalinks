@@ -1,0 +1,53 @@
+# ECSのサービスをパブリックサブネットではなくプライベートサブネットに配置する
+# インターネットへの接続はNAT Gatewayを経由する
+- op: replace
+  path: /Resources/Service/Properties/NetworkConfiguration/AwsvpcConfiguration
+  value:
+    AssignPublicIp: DISABLED
+    Subnets:
+      Fn::Split:
+        - ','
+        - Fn::ImportValue: !Sub '${AppName}-${EnvName}-PrivateSubnets'
+    SecurityGroups:
+      - Fn::ImportValue: !Sub '${AppName}-${EnvName}-EnvironmentSecurityGroup'
+
+- op: add
+  path: /Mappings
+  value:
+    ALBSetting:
+      staging:
+        listenerArn: arn:aws:elasticloadbalancing:ap-northeast-1:502078855105:listener/app/pos-st-Publi-phsPYsmskHS1/bd156daab1e9fa77/f806a4b26cf6ce71
+        hostHeader: staging.mycalinks.io
+      production:
+        listenerArn: arn:aws:elasticloadbalancing:ap-northeast-1:502078855105:listener/app/pos-pr-Publi-x89EldB2GWhA/41d1fb6360bc190f/9e1b7c5ca4566f1f
+        hostHeader: mycalinks.io
+      customer:
+        listenerArn: arn:aws:elasticloadbalancing:ap-northeast-1:502078855105:listener/app/pos-cu-Publi-kwHwoaTrwKVL/b3bc47a2eae10a36/92bc38804d37d52e
+        hostHeader: mycalinks.com
+      develop:
+        listenerArn: arn:aws:elasticloadbalancing:ap-northeast-1:502078855105:listener/app/pos-de-Publi-WmdyBDVT1mpK/c37baaf547d25e98/443385717d940c7a
+        hostHeader: develop.mycalinks.io
+
+- op: replace
+  path: /Resources/HTTPListenerRule/Properties/ListenerArn
+  value: !FindInMap [ALBSetting, !Ref EnvName, listenerArn]
+
+- op: replace
+  path: /Resources/HTTPRulePriorityAction/Properties/ListenerArn
+  value: !FindInMap [ALBSetting, !Ref EnvName, listenerArn]
+
+- op: replace
+  path: /Resources/HTTPListenerRule/Properties/Conditions
+  value:
+    - Field: 'host-header'
+      HostHeaderConfig:
+        Values:
+          - !FindInMap [ALBSetting, !Ref EnvName, hostHeader]
+
+# # - op: add
+# #   path: /Resources/Service/Properties/LoadBalancers/0/TargetGroupPort
+# #   value: 443
+# # [TODO] ロードバランサーのタイムアウト設定などもやりたい感じはある
+
+- op: remove
+  path: /Resources/ExecutionRole/Properties/Policies/0/PolicyDocument/Statement/0/Condition

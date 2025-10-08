@@ -1,0 +1,37 @@
+mutation getAllProducts {
+  bulkOperationRunQuery(
+    query: """
+    {
+      products {
+        edges {
+          node {
+            __typename
+            id
+            title
+            variants {
+              edges {
+                node {
+                  __typename
+                  id
+                  inventoryItem {
+                    id
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+  ) {
+    bulkOperation {
+      id
+      status
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}

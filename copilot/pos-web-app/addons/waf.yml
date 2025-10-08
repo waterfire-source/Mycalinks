@@ -1,0 +1,207 @@
+Parameters:
+  App:
+    Type: String
+  Env:
+    Type: String
+  Name:
+    Type: String
+
+# WAF
+Resources:
+  # IP アドレスのホワイトリスト（例：海外から許可したいIP）
+  # googleのDNSサーバを仮で指定している
+  AllowListedIPs:
+    Type: AWS::WAFv2::IPSet
+    Properties:
+      Name: !Sub '${App}-${Env}-${Name}-acl-allow-ipset'
+      Scope: REGIONAL
+      IPAddressVersion: IPV4
+      Addresses:
+        - 8.8.8.8/32
+        - 8.8.4.4/32
+
+  WebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub '${App}-${Env}-${Name}-web-acl'
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub '${App}-${Env}-${Name}-web-acl-metric'
+        SampledRequestsEnabled: true
+
+      Rules:
+        # ① 日本ではない・ホワイトIPでもない海外IPから、
+        # /login,/auth/*,等にアクセス禁止
+        - Name: BlockForeignAccessToSensitivePaths
+          Priority: 10
+          Statement:
+            AndStatement:
+              Statements:
+                # 日本以外
+                - NotStatement:
+                    Statement:
+                      GeoMatchStatement:
+                        CountryCodes:
+                          - JP
+                # ホワイトリストIP以外
+                - NotStatement:
+                    Statement:
+                      IPSetReferenceStatement:
+                        Arn: !GetAtt AllowListedIPs.Arn
+                # パスが一致する
+                - OrStatement:
+                    Statements:
+                      - ByteMatchStatement:
+                          FieldToMatch:
+                            UriPath: {}
+                          PositionalConstraint: STARTS_WITH
+                          SearchString: '/login'
+                          TextTransformations:
+                            - Priority: 0
+                              Type: NONE
+                      - ByteMatchStatement:
+                          FieldToMatch:
+                            UriPath: {}
+                          PositionalConstraint: STARTS_WITH
+                          SearchString: '/auth/'
+                          TextTransformations:
+                            - Priority: 0
+                              Type: NONE
+                      - ByteMatchStatement:
+                          FieldToMatch:
+                            UriPath: {}
+                          PositionalConstraint: STARTS_WITH
+                          SearchString: '/guest/'
+                          TextTransformations:
+                            - Priority: 0
+                              Type: NONE
+                      - ByteMatchStatement:
+                          FieldToMatch:
+                            UriPath: {}
+                          PositionalConstraint: STARTS_WITH
+                          SearchString: '/api/store/'
+                          TextTransformations:
+                            - Priority: 0
+                              Type: NONE
+                      - ByteMatchStatement:
+                          FieldToMatch:
+                            UriPath: {}
+                          PositionalConstraint: STARTS_WITH
+                          SearchString: '/api/corporation/'
+                          TextTransformations:
+                            - Priority: 0
+                              Type: NONE
+                      - ByteMatchStatement:
+                          FieldToMatch:
+                            UriPath: {}
+                          PositionalConstraint: STARTS_WITH
+                          SearchString: '/api/account/'
+                          TextTransformations:
+                            - Priority: 0
+                              Type: NONE
+                      - ByteMatchStatement:
+                          FieldToMatch:
+                            UriPath: {}
+                          PositionalConstraint: STARTS_WITH
+                          SearchString: '/api/launch'
+                          TextTransformations:
+                            - Priority: 0
+                              Type: NONE
+                      - ByteMatchStatement:
+                          FieldToMatch:
+                            UriPath: {}
+                          PositionalConstraint: STARTS_WITH
+                          SearchString: '/api/auth/'
+                          TextTransformations:
+                            - Priority: 0
+                              Type: NONE
+                      - ByteMatchStatement:
+                          FieldToMatch:
+                            UriPath: {}
+                          PositionalConstraint: STARTS_WITH
+                          SearchString: '/api/contract/'
+                          TextTransformations:
+                            - Priority: 0
+                              Type: NONE
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub '${App}-${Env}-${Name}-BlockForeignAccessToSensitivePaths'
+
+        # ② 評判の悪いIPアドレスや信頼性が低いIPアドレスからのアクセスをブロック
+        # 主にボットがターゲット、AWSが収集した知見を元に作成されたマネージドルール
+        # bot controlと比較し、AWSが継続的にリストを更新してくれるのでメンテナンス不要かつ安価である為、一旦こちらを採用
+        # - Name: AWS-AWSManagedRulesAmazonIpReputationList
+        #   Priority: 20
+        #   Statement:
+        #     ManagedRuleGroupStatement:
+        #       VendorName: AWS
+        #       Name: AWSManagedRulesAmazonIpReputationList
+        #   OverrideAction:
+        #     None: {}
+        #   VisibilityConfig:
+        #     SampledRequestsEnabled: true
+        #     CloudWatchMetricsEnabled: true
+        #     MetricName: !Sub '${App}-${Env}-${Name}-AWSManagedRulesAmazonIpReputationList'
+
+        # ③ OWASP Top 10 管理ルール
+        # - Name: AWS-AWSManagedRulesCommonRuleSet
+        #   Priority: 30
+        #   Statement:
+        #     ManagedRuleGroupStatement:
+        #       VendorName: AWS
+        #       Name: AWSManagedRulesCommonRuleSet
+        #       # 誤検知してしまう為、「EC2MetaDataSSRF」を除外
+        #       ExcludedRules:
+        #         - Name: EC2MetaDataSSRF
+        #   OverrideAction:
+        #     None: {}
+        #   VisibilityConfig:
+        #     SampledRequestsEnabled: true
+        #     CloudWatchMetricsEnabled: true
+        #     MetricName: !Sub '${App}-${Env}-${Name}-AWSManagedRulesCommonRuleSet'
+
+        # ④ SQLインジェクション
+        # - Name: AWS-AWSManagedRulesSQLiRuleSet
+        #   Priority: 40
+        #   Statement:
+        #     ManagedRuleGroupStatement:
+        #       VendorName: AWS
+        #       Name: AWSManagedRulesSQLiRuleSet
+        #   OverrideAction:
+        #     None: {}
+        #   VisibilityConfig:
+        #     SampledRequestsEnabled: true
+        #     CloudWatchMetricsEnabled: true
+        #     MetricName: !Sub '${App}-${Env}-${Name}-AWSManagedRulesSQLiRuleSet'
+
+  WebACLAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      WebACLArn: !GetAtt WebACL.Arn
+      ResourceArn: !Sub
+        - 'arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:loadbalancer/${ExportedLBFullName}'
+        - {
+            ExportedLBFullName:
+              {
+                'Fn::ImportValue': !Sub '${App}-${Env}-PublicLoadBalancerFullName',
+              },
+          }
+
+  WAFLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "aws-waf-logs-${App}-${Env}-${Name}-web-acl"
+      RetentionInDays: 5
+
+  WAFLogging:
+    Type: AWS::WAFv2::LoggingConfiguration
+    Properties:
+      ResourceArn: !GetAtt WebACL.Arn
+      LogDestinationConfigs:
+        - !GetAtt WAFLogGroup.Arn

@@ -1,0 +1,33 @@
+# ECSのサービスをパブリックサブネットではなくプライベートサブネットに配置する
+# インターネットへの接続はNAT Gatewayを経由する
+- op: replace
+  path: /Resources/Service/Properties/NetworkConfiguration/AwsvpcConfiguration
+  value:
+    AssignPublicIp: DISABLED
+    Subnets:
+      Fn::Split:
+        - ','
+        - Fn::ImportValue: !Sub '${AppName}-${EnvName}-PrivateSubnets'
+    SecurityGroups:
+      - Fn::ImportValue: !Sub '${AppName}-${EnvName}-EnvironmentSecurityGroup'
+
+- op: add
+  path: /Resources/EventsQueue/Properties/ContentBasedDeduplication
+  value: true
+
+- op: add
+  path: /Outputs
+  value:
+    EventsQueueArn:
+      Description: 'EventsQueueのARN'
+      Value: !GetAtt EventsQueue.Arn
+      Export:
+        Name: !Sub '${AppName}-${EnvName}-${WorkloadName}-EventsQueueARN'
+    EventsQueueUrl:
+      Description: 'EventsQueueのURL'
+      Value: !Ref EventsQueue
+      Export:
+        Name: !Sub '${AppName}-${EnvName}-${WorkloadName}-EventsQueueURL'
+
+- op: remove
+  path: /Resources/ExecutionRole/Properties/Policies/0/PolicyDocument/Statement/0/Condition

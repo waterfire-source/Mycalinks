@@ -1,0 +1,59 @@
+# ECSのサービスをパブリックサブネットではなくプライベートサブネットに配置する
+# インターネットへの接続はNAT Gatewayを経由する
+- op: replace
+  path: /Resources/Service/Properties/NetworkConfiguration/AwsvpcConfiguration
+  value:
+    AssignPublicIp: DISABLED
+    Subnets:
+      Fn::Split:
+        - ','
+        - Fn::ImportValue: !Sub '${AppName}-${EnvName}-PrivateSubnets'
+    SecurityGroups:
+      - Fn::ImportValue: !Sub '${AppName}-${EnvName}-EnvironmentSecurityGroup'
+# HTTPS化
+- op: add
+  path: /Resources/HTTPSListener
+  value:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Sub
+        - 'arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:loadbalancer/${ExportedLBFullName}'
+        - {
+            ExportedLBFullName:
+              {
+                'Fn::ImportValue': !Sub '${AppName}-${EnvName}-PublicLoadBalancerFullName',
+              },
+          }
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      Certificates:
+        - CertificateArn: arn:aws:acm:ap-northeast-1:502078855105:certificate/318dabcb-8114-4a1f-bb15-de982de9055c
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+- op: add
+  path: /Resources/HTTPSListenerCertificate
+  value:
+    Type: AWS::ElasticLoadBalancingV2::ListenerCertificate
+    Properties:
+      ListenerArn: !Ref HTTPSListener
+      Certificates:
+        - CertificateArn: arn:aws:acm:ap-northeast-1:502078855105:certificate/4d8c0257-c54d-4e13-b3fd-b46c7835dc4b
+        - CertificateArn: arn:aws:acm:ap-northeast-1:502078855105:certificate/120da612-bd48-422c-adbb-3514f298e2d2
+        - CertificateArn: arn:aws:acm:ap-northeast-1:502078855105:certificate/26b298ad-6d76-4489-88c1-385080bb2626
+        - CertificateArn: arn:aws:acm:ap-northeast-1:502078855105:certificate/63dfc233-0291-436c-9010-e92848787246
+        - CertificateArn: arn:aws:acm:ap-northeast-1:502078855105:certificate/8ff3a9cf-3492-49ab-bd5d-1cfd54cdc927
+        - CertificateArn: arn:aws:acm:ap-northeast-1:502078855105:certificate/1475e6a1-2a24-47c3-9e04-40db9c9a2b9e
+
+- op: replace
+  path: /Resources/HTTPListenerRule/Properties/ListenerArn
+  value: !Ref HTTPSListener
+# - op: add
+#   path: /Resources/Service/Properties/LoadBalancers/0/TargetGroupPort
+#   value: 443
+# [TODO] ロードバランサーのタイムアウト設定などもやりたい感じはある
+
+- op: remove
+  path: /Resources/ExecutionRole/Properties/Policies/0/PolicyDocument/Statement/0/Condition

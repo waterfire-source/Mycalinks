@@ -1,0 +1,2 @@
+- op: remove
+  path: /Resources/ExecutionRole/Properties/Policies/0/PolicyDocument/Statement/0/Condition

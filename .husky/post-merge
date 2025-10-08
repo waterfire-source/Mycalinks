@@ -1,0 +1,4 @@
+(git diff 'HEAD@{1}' --name-only | grep package.json > /dev/null) && pnpm i || echo 'package.jsonファイルに変更はありませんでした'
+
+# prisma generate
+(git diff 'HEAD@{1}' --name-only | grep packages/backend-core/prisma/schema/.*.prisma > /dev/null) && pnpm run prisma:generate && echo 'マイグレーションがあったようです。念の為、devサーバーを起動し直してください。' || echo 'マイグレーションはありませんでした'
