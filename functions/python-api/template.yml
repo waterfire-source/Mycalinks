@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Python API Lambda function template
+
+Parameters:
+  App:
+    Type: String
+    Default: pos
+  Env:
+    Type: String
+    Default: staging
+
+Conditions:
+  IsStaging: !Equals [!Ref Env, 'staging']
+
+Resources:
+  PythonApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${App}-${Env}-PythonApiFunction
+      Runtime: python3.12
+      CodeUri: ./
+      Handler: app.lambda_handler
+      MemorySize: 1024
+      Timeout: 120
+      Environment:
+        Variables:
+          AMAZON_S3_BUCKET: static.mycalinks.io
+          BOT_TOKEN: 'QXKsNHWmG3n3ZaFW6NJ8dPNf7yDdkNdeqx77qaw8.BiKV8isfQ5BibSzamWzm6Zut2QMRVKuxuu7gk5fK.ZLKKH8sMwzg7jpUgQ8UqTGcGpTdpVCYEEpKrYDHg.7qxrCZw553fKeBWrGBd3BJTwhiTvtcaQz4fahpR9.2PxdTr5xBACDnpGZ7g2V6vi5deRWw6xiWY3sB2fK'
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - 's3:GetObject'
+                - 's3:PutObject'
+                - 's3:PutObjectAcl'
+              Resource: '*'
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+
+Outputs:
+  PythonApiEndpoint:
+    Description: 'API Gateway endpoint URL for Python API function'
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/'

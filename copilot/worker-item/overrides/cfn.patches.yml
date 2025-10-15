@@ -1,0 +1,21 @@
+# ECSのサービスをパブリックサブネットではなくプライベートサブネットに配置する
+# インターネットへの接続はNAT Gatewayを経由する
+- op: replace
+  path: /Resources/Service/Properties/NetworkConfiguration/AwsvpcConfiguration
+  value:
+    AssignPublicIp: DISABLED
+    Subnets:
+      Fn::Split:
+        - ','
+        - Fn::ImportValue: !Sub '${AppName}-${EnvName}-PrivateSubnets'
+    SecurityGroups:
+      - Fn::ImportValue: !Sub '${AppName}-${EnvName}-EnvironmentSecurityGroup'
+# - op: add
+#   path: /Resources/EventsQueue/Properties/ContentBasedDeduplication
+#   value: true
+# - op: add
+#   path: /Resources/poswebappitemfifoSNSTopicSubscription/Properties/RawMessageDelivery
+#   value: true
+
+- op: remove
+  path: /Resources/ExecutionRole/Properties/Policies/0/PolicyDocument/Statement/0/Condition

@@ -1,0 +1,69 @@
+Parameters:
+  App:
+    Type: String
+  Env:
+    Type: String
+
+# 条件定義
+Conditions:
+  IsProduction: !Equals [!Ref Env, 'production']
+
+Resources:
+  SnsTopic: # アラート通知用のSNS
+    Condition: IsProduction
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${App}-${Env}-slack-infra-alert-topic'
+
+  SlackInfraAlertChannel: # インフラアラート用のチャンネル
+    Condition: IsProduction
+    Type: AWS::Chatbot::SlackChannelConfiguration
+    Properties:
+      ConfigurationName: !Sub '${App}-${Env}-slack-infra-alert-channel'
+      IamRoleArn: !GetAtt ChatbotRole.Arn
+      SlackWorkspaceId: T02PYLVNE8H
+      SlackChannelId: C08PGAT31RU
+      # LoggingLevel: ERROR
+      SnsTopicArns:
+        - !Ref SnsTopic
+
+  ChatbotRole:
+    Condition: IsProduction
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${App}-${Env}-slack-chatbot-role'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: chatbot.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /service-linked-role/
+      Policies:
+        - PolicyName: AWSChatbotNotificationsOnlyAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudwatch:Describe*
+                  - cloudwatch:Get*
+                  - cloudwatch:List*
+                Resource:
+                  - '*'
+
+Outputs:
+  SlackChatbotArn:
+    Condition: IsProduction
+    Value: !GetAtt SlackInfraAlertChannel.Arn
+    Description: ARN of the Slack Chatbot Configuration
+    Export:
+      Name: !Sub '${App}-${Env}-slack-chatbot-arn'
+
+  SlackAlertTopicArn:
+    Condition: IsProduction
+    Value: !Ref SnsTopic
+    Description: ARN of the Slack Alert Topic
+    Export:
+      Name: !Sub '${App}-${Env}-slack-infra-alert-topic-arn'

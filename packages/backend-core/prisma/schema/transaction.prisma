@@ -1,0 +1,432 @@
+//取引関連
+
+
+enum SetDealStatus {
+  DRAFT //下書き状態（公開前）
+  PUBLISH //公開中
+  DELETED //終了
+}
+
+//セット商品の定義
+model Set_Deal {
+  id               Int    @db.UnsignedInt()   @id @default(autoincrement())
+  store_id         Int  @db.UnsignedInt() //どの店舗
+  store            Store    @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  staff_account_id Int  @db.UnsignedInt() //登録時の担当者
+  staff_account    Account  @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  display_name     String //セット名
+  image_url String? //画像
+  discount_amount  String //適用割引の量 30円引きだったら-30 30%引きだったら70%（他のと統一するためこうしてます）
+  created_at       DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at       DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  status SetDealStatus @default(DRAFT) 
+
+  @@index([status, store_id])
+
+  expire_at DateTime? @db.Date() //有効期限
+  start_at DateTime? @db.Date() //公開開始日
+
+
+  products     Set_Deal_Product[] //商品定義
+  transactions Transaction_Set_Deal[] //このセット販売を適用した取引
+
+  //廃止予定
+  is_deleted       Boolean  @default(false) @db.UnsignedTinyInt() //削除されたかどうか
+}
+
+//セット販売の商品
+model Set_Deal_Product {
+  set_deal_id Int  @db.UnsignedInt()
+  set_deal    Set_Deal @relation(fields: [set_deal_id], references: [id], onDelete: Cascade)
+  product_id  Int  @db.UnsignedInt()
+  product     Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  item_count  Int //個数
+
+  @@id([set_deal_id, product_id])
+}
+
+
+
+
+//セールのステータス
+enum SaleStatus {
+  NOT_HELD //未開催
+  ON_HELD //開催中
+  FINISHED //期間終了（完全に過去のセール）
+}
+
+//セールの定義
+model Sale {
+  id               Int        @db.UnsignedInt()      @id @default(autoincrement())
+  store_id         Int  @db.UnsignedInt() //どの店舗のセールか
+  store            Store           @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  status           SaleStatus      @default(NOT_HELD) //セールの開催状況
+  on_pause         Boolean         @default(false) @db.UnsignedTinyInt() //中止中かどうか
+  display_name     String //セール名
+  transaction_kind TransactionKind @default(sell) //セールが適用される取引の種類
+  start_datetime   DateTime        @db.Timestamp(0) //セールの開始日時
+
+  @@index([store_id, status, transaction_kind])
+
+  //割引・割増の詳細
+  discount_amount String? //%表示かもしくは整数 10%引きの場合90%と格納 10円引きの場合 -10
+
+  //終了条件
+  end__datetime         DateTime? @db.Timestamp(0) //セールの終了日時
+  end__total_item_count Int? //セールを終了する アイテムの合計数
+  end__unit_item_count  Int? //セールを終了する 個別のアイテム上限数
+
+  //繰り返しの設定
+  repeat_cron_rule String? //CRON形式 参考: https://qiita.com/nemutas/items/3f5816eabbf0eda5e6a9
+
+  //セール全体が終わる日時 通常はend__datetimeと同じだが、繰り返し設定の時はそれの終了日を明示的に入れる
+  //これが入ってないと、基本的に終わらない
+  sale_end_datetime DateTime? @db.Timestamp(0)
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  products    Sale_Product[] //セールの定義に関わる商品
+  departments Sale_Department[] //セールに含む部門（カテゴリとジャンルの組み合わせ）
+
+  product_history Sale_Product_History[]
+
+  transaction_carts Transaction_Cart[]
+
+  @@index([status])
+  @@index([transaction_kind])
+}
+
+//セールが実際に適用された商品（これを使って上限数などを測る）
+model Sale_Product_History {
+  sale_id          Int  @db.UnsignedInt()
+  sale             Sale    @relation(fields: [sale_id], references: [id], onDelete: Cascade)
+  product_id       Int  @db.UnsignedInt()
+  product          Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  total_item_count Int //何点購入されたか
+  total_price      Int? //何円購入されたりしたか（必要ないと思うが念の為）
+
+  @@id([sale_id, product_id])
+}
+
+enum SaleRule {
+  include //含める
+  exclude //除外する
+}
+
+//セールと結びつける商品
+model Sale_Product {
+  sale_id    Int  @db.UnsignedInt()
+  sale       Sale     @relation(fields: [sale_id], references: [id], onDelete: Cascade)
+  product_id Int  @db.UnsignedInt()
+  product    Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  rule       SaleRule //ルール
+
+  @@id([sale_id, product_id]) //一つのセールで同時に違うルールで同じ商品を登録することができないようにする
+}
+
+//セールにと結びつける部門
+model Sale_Department {
+  id               Int     @db.UnsignedInt()         @id @default(autoincrement())
+  sale_id       Int  @db.UnsignedInt()
+  sale          Sale       @relation(fields: [sale_id], references: [id], onDelete: Cascade)
+  
+  rule          SaleRule //ルール
+
+  //一応仕様上では、genre_idとcategory_idはそれぞれnullだった場合ワイルドカードと同義
+  //つまりどちらもnullの場合すべての商品が対象
+  item_genre_id          Int?  @db.UnsignedInt() //ジャンル
+  item_genre             Item_Genre? @relation(fields: [item_genre_id], references: [id], onDelete: Cascade)
+  
+  item_category_id          Int?  @db.UnsignedInt() //商品種別
+  item_category             Item_Category? @relation(fields: [item_category_id], references: [id], onDelete: Cascade)
+
+
+  @@unique([sale_id, item_genre_id, item_category_id])
+
+  // [category対応廃止予定]
+  department_id Int?  @db.UnsignedInt()
+  department    Department? @relation(fields: [department_id], references: [id], onDelete: Cascade)
+}
+
+//セールの定期実行プログラム確認用
+enum SaleCalculaterHistoryStatus {
+  OK
+  ERROR
+}
+
+model Sale_Calculate_History {
+  id         Int    @db.UnsignedInt()   @id @default(autoincrement())
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  //終了日時に相当
+  updated_at DateTime                    @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  status     SaleCalculaterHistoryStatus @default(OK)
+
+  log_text String? @db.Text
+}
+
+enum TransactionKind {
+  sell
+  buy
+}
+
+//このややこしさどうにかしたい
+enum TransactionPaymentMethod {
+  //オリジナル
+  cash
+  bank
+
+  //外部サービス系
+  square //ややこしいが、一旦これをcardということにする
+  paypay //ペイペイ（QRコード決済全般）
+  felica //電子マネー
+}
+
+//このステータスは取引におけるステータスであるため、買い取りの状況（査定済みかどうかなど）については別次元で管理する
+enum TransactionStatus {
+  canceled // draftから削除した時や決済が失敗した時(決済後に返品した場合はcompletedでreturn_transactionを作成する)
+  completed
+  paying //支払い中
+  draft //一時保存機能用、そのほかにも、キャンセルされていない取引はすべて下書きとなる
+}
+
+//税金の種類
+enum TransactionTaxKind {
+  INCLUDE_TAX //内税
+  EXCLUDE_TAX //外税
+  DUTY_FREE //免税 ※TaxModeを使おうかと思ったが免税のパターンがあるため取引独自でenumを定義した
+}
+
+//取引
+//[TODO] 下書き販売取引作成時にあらかじめ在庫をおさえられるようにしたい
+model Transaction {
+  id                  Int    @db.UnsignedInt()  @id @default(autoincrement()) /// @zod.number.describe("取引ID")
+
+  
+  reception_staff_account_id    Int?  @db.UnsignedInt() /// @zod.number.describe("受付担当者のID")
+  reception_staff_account       Account? @relation("transactionReceptionStaff", fields: [reception_staff_account_id], references: [id], onDelete: Cascade)
+
+  input_staff_account_id Int?  @db.UnsignedInt() /// @zod.number.describe("商品を入力した担当者のID（買取ではこれが査定入力になり、販売では保留作成）")
+  input_staff_account    Account? @relation("transactionInputStaff", fields: [input_staff_account_id], references: [id], onDelete: Cascade)
+
+  staff_account_id    Int?  @db.UnsignedInt() /// @zod.number.describe("会計を確定させた担当者のID")
+  staff_account       Account? @relation("transactionStaff", fields: [staff_account_id], references: [id], onDelete: Cascade)
+  store_id            Int  @db.UnsignedInt() /// @zod.number.describe("店舗ID")
+  store               Store   @relation(fields: [store_id], references: [id], onDelete: Cascade)
+
+  //どのレジで取引を行ったのか（一部の下書き取引などではレジを使ってなかったりするため、nullable）
+  register_id Int?  @db.UnsignedInt() /// @zod.number.describe("レジID")
+  register Register?  @relation(fields: [register_id], references: [id], onDelete: Cascade)
+
+  //取引成立後に顧客情報が変わった時に過去の取引の顧客情報も変わってしまうことになるため、Transactionのレコードに独自で顧客個人情報をもたせるか検討中
+  customer_id Int?  @db.UnsignedInt() /// @zod.number.describe("POSの顧客ID")
+  customer    Customer? @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+
+  transaction_kind           TransactionKind //sell | buy //sellが販売
+  is_return Boolean @default(false) @db.UnsignedTinyInt() //返品取引かどうか
+  hidden Boolean @default(false) @db.UnsignedTinyInt() //取引一覧などで非表示にするかどうか（予約受付など）
+  @@index([is_return, store_id, transaction_kind, status])
+  @@index([customer_id, store_id, status])
+  @@index([register_id, store_id, status])
+
+  total_price                Int /// @zod.number.describe("合計額 支払った額")
+  wholesale_total_price      Int? /// @zod.number.describe("仕入れ値の合計用")
+  
+  point_amount               Int? /// @zod.number.describe("付与されたポイント 付与されなかった場合はnullだったり0だったり")
+  total_point_amount         Int? /// @zod.number.describe("この取引でこの顧客は合計何ポイントになったか")
+  subtotal_price             Int? /// @zod.number.describe("小計（商品価格の合計など） 全体割引を考慮しない額 外税Modeの場合は、ここは税抜価格の合計って感じになる")
+  tax                        Int? /// @zod.number.describe("税")
+  tax_kind TransactionTaxKind? //税の種類（下書き状態だと入力しないためnullable）
+  //課税対象額も保持するかも
+  discount_price             Int @default(0) /// @zod.number.describe("手動値引き額[全体]")
+  coupon_discount_price Int @default(0) /// @zod.number.describe("coupon利用によって割り引かれた額 原則負の数 買取の場合正の数になる")
+  point_discount_price Int @default(0) /// @zod.number.describe("ポイント利用によって割り引かれた額（ポイント利用＝全体割引ということにする） 原則負の数")
+  set_deal_discount_price Int @default(0) /// @zod.number.describe("セット販売によって割り引かれた額 原則負の数")
+  payment_method             TransactionPaymentMethod? //支払い方法 cash | square（スクエアの中にある支払い方法）
+  status                     TransactionStatus? //取引のステータス created（作られただけの状態、在庫未調整、支払い無効） | canceled（端末などでキャンセルされたときなど　もしくは返品されたときの既存の取引に対してつける　在庫調整をロールバック、支払い無効） | completed（在庫調整済み、支払い有効 Pay_idを記す）
+  transaction_carts          Transaction_Cart[] //この取引のカート内容
+  transaction_customer_carts Transaction_Customer_Cart[]
+  set_deals                  Transaction_Set_Deal[] //結びついているセット販売
+  total_reservation_price Int @default(0) /// @zod.number.describe("予約の額の合計値（自動計算） 前金の時は正の数")
+  
+  payment                    Payment?
+  original_transaction_id    Int?  @db.UnsignedInt() /// @zod.number.describe("関連づけられている、元の取引ID")
+  original_transaction       Transaction?                @relation("originalTransaction", fields: [original_transaction_id], references: [id], onDelete: Restrict)
+  return_transactions           Transaction[]                @relation("originalTransaction") //この取引の返品取引
+  created_at                 DateTime                    @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at                 DateTime                    @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  finished_at                DateTime                    @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe("取引が終了した日時")
+
+  terminal_checkout_id String? /// @zod.string.describe("端末チェックアウトを行った時のID")
+
+  id_kind                    String? /// @zod.string.describe("身分証の種類")
+  id_number                  String? /// @zod.string.describe("身分証の番号")
+  parental_consent_image_url String? /// @zod.string.describe("保護者承諾書がUploadされているURL")
+  parental_contact String? /// @zod.string.describe("保護者の連絡先（未成年の場合は必須項目）")
+
+  reception_number Int? /// @zod.number.describe("受付番号")
+  //逆にいうと、キャンセル済みか完了済みのTransactionで使われていた番号はまた使える
+  @@index([reception_number])
+  @@index([finished_at])
+
+  term_accepted_at DateTime? /// @zod.date.describe("利用規約に同意した日時 主に買取用")
+  // wholesale_prices Product_Wholesale_Price_History[] @relation("transactionWholesalePrice")
+
+  //買取機能専用のフィールド
+  buy__is_assessed Boolean @default(false) @db.UnsignedTinyInt() //買取の査定が終わったかどうか
+  buy__assessed_total_price Int? /// @zod.number.describe("買取の、査定確定時の合計額")
+
+  description         String? /// @zod.string.describe("備考欄")
+  signature_image_url String? /// @zod.string.describe("買取の承諾サインの画像URL")
+  can_create_signature Boolean @default(false) @db.UnsignedTinyInt()
+
+  @@index([transaction_kind])
+  @@index([payment_method])
+  @@index([status])
+
+  total_consignment_sale_price Int @default(0) /// @zod.number.describe("委託在庫の売り上げ")
+
+  //generated column
+  total_discount_price Int? @default(dbgenerated()) /// @zod.number.describe("合計全体値引き金額（個別割引等は合わせない） 手動全体割引 + セット販売割引 + ポイント利用割引")
+  total_sale_price Int? @default(dbgenerated()) /// @zod.number.describe("売上高（主に販売用） total_price - total_reserve_price")
+
+}
+
+//取引のカート内容
+model Transaction_Cart {
+
+  id                  Int     @db.UnsignedInt() @id @default(autoincrement()) /// @zod.number.describe("取引のカート内容のID")
+  order_number Int? /// @zod.number.describe("並び順（昇順）")
+  transaction_id Int  @db.UnsignedInt() /// @zod.number.describe("取引のID")
+  transaction    Transaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  product_id     Int  @db.UnsignedInt() /// @zod.number.describe("在庫のID")
+  product        Product     @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  original_item_count Int? /// @zod.number.describe("最初のアイテム数")
+  item_count     Int /// @zod.number.describe("買取、購入個数")
+
+  sale_id             Int?  @db.UnsignedInt() /// @zod.number.describe("紐づけられているSaleのID")
+  sale                Sale? @relation(fields: [sale_id], references: [id], onDelete: SetNull) //setnullする
+  sale_discount_price Int   @default(0) /// @zod.number.describe("実際にSaleによって引かれた額 負の数もあり")
+
+  original_unit_price Int? /// @zod.number.describe("DataBaseに保存されていた、この在庫のその時点での単価")
+  unit_price Int /// @zod.number.describe("もともとの単価 値引き額は考慮しない")
+
+  wholesale_total_price Int @default(0) /// @zod.number.describe("仕入れ値の合計額（販売取引用）")
+
+  discount_price Int @default(0) /// @zod.number.describe("手動個別値引き額")
+
+  reservation_reception_product_id_for_deposit Int? @db.UnsignedInt() /// @zod.number.describe("予約の前金自体の支払いだったらそのReservation_Reception_ProductのIDを入れる")
+  reservation_reception_product_for_deposit Reservation_Reception_Product? @relation("reservationDepositTransactionCart", fields: [reservation_reception_product_id_for_deposit], references: [id], onDelete: Cascade)
+  reservation_reception_product_id_for_receive Int? @db.UnsignedInt() /// @zod.number.describe("予約の受け取り自体の支払いだったらそのReservation_Reception_ProductのIDを入れる")
+  reservation_reception_product_for_receive Reservation_Reception_Product? @relation("reservationReceivedTransactionCart", fields: [reservation_reception_product_id_for_receive], references: [id], onDelete: Cascade)
+
+  reservation_price Int @default(0) /// @zod.number.describe("予約の前金自体の支払いだったら正の値でその金額を入れる 受け取りだったら負の値で前金の金額を入れることで前金の分 割引く")
+  
+  //委託在庫分の売り上げ
+  consignment_sale_unit_price Int @default(0) /// @zod.number.describe("委託の分の売り上げ")
+  //委託在庫の手数料（単価）
+  consignment_commission_unit_price Int @default(0) /// @zod.number.describe("委託手数料")
+
+  //generated column
+  total_discount_price Int? @default(dbgenerated()) /// @zod.number.describe("合計の値引き額（単価） discount_price + sale_discount_price")
+  total_unit_price Int? @default(dbgenerated()) /// @zod.number.describe("実際に払った額（1つあたり） unit_price + reservation_price + total_discount_price　実際に払った額")
+  total_sale_unit_price Int? @default(dbgenerated()) /// @zod.number.describe("単価売上高（主に販売用） unit_price + total_discount_price")
+
+  @@index([transaction_id, product_id])
+}
+
+//アプリのお客さんの提案カート内容
+model Transaction_Customer_Cart {
+
+  //[TODO] これをtransaction_cart_idにしたい
+  id                  Int   @db.UnsignedInt()   @id @default(autoincrement())
+
+  transaction_id Int  @db.UnsignedInt()
+  transaction    Transaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  product_id     Int  @db.UnsignedInt()
+  product        Product     @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  unit_price     Int //単価（同じ商品でも価格の異なる商品が存在する可能性があるため）
+  discount_price Int? //値引き額
+  //unit_price + discount_priceが実質的な単価になる
+  //実質的な単価が表示される額に相当されるため、割引情報もしっかりと顧客カートに格納する
+  item_count     Int //買取、購入個数
+  original_item_count Int? /// @zod.number.describe("最初のアイテム数")
+
+  @@index([transaction_id, product_id])
+
+}
+
+//取引に紐づいているセット販売
+//とりあえず、どのproductにセット販売を適用したのかは保持しなくて大丈夫
+model Transaction_Set_Deal {
+  transaction_id               Int  @db.UnsignedInt()
+  transaction                  Transaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  set_deal_id                  Int  @db.UnsignedInt()
+  set_deal                     Set_Deal    @relation(fields: [set_deal_id], references: [id], onDelete: Cascade)
+  total_discount_price Int //このセット販売で合計どれくらい割引したのか 割引だったら負の数
+  apply_count                  Int //このセットを適用した数
+
+  @@id([transaction_id, set_deal_id])
+}
+
+//割引プリセットの定義 これ使ってないかも
+//もしかすると、セールでの割引やセット販売での割引などもここで定義した割引を使うようにする可能性がある（割引系を必ずこのモデル経由にする意図）
+model Discount {
+  id                  Int  @db.UnsignedInt()    @id @default(autoincrement())
+  display_name String //割引の表示名
+  discount_amount String //%表示かもしくは整数 10%引きの場合90%と格納 10円引きの場合 -10 割引か割増かはここで判断できる
+  description String? //備考
+
+}
+
+//[TODO] Transaction_Discountというモデルを作成する
+
+enum PaymentMode {
+  pay
+  refund
+}
+
+enum PaymentService {
+  square
+  original
+}
+
+//使ってない
+// enum PaymentMethod {
+//   CASH
+//   CARD
+//   BANK
+// }
+
+//支払いの詳細情報をまとめる　必ず、有効な支払いが行われた時に残す
+//また、必ず一つのトランザクションと結び付けられている
+model Payment {
+  id             Int       @db.UnsignedInt()       @id @default(autoincrement())
+  transaction_id Int      @db.UnsignedInt()        @unique
+  transaction    Transaction     @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  mode           PaymentMode? //pay | refund //refundは返金
+  service        PaymentService? // square //基本的にすべてsquareとなる（現金でもSquare経由で決済を行うため）
+  method         String? // CASH | CARD(Square's source_type)
+
+  source_event_json Json? //Squareなどでのwebhookのイベントのリクエストボディそのまま
+  source_id         String? //SquareなどのサービスにおけるID（Payment_id）返金だったらrefundのID
+
+  //合計額
+  total_amount Int //店にプラスになる支払い（販売）は正の数、マイナスになる支払い（買取、返金）は負の数
+
+  //カードだったとき
+  card__card_brand String? //VISAなど
+  card__card_type  String? //CREDITなど
+  card__exp_month  Int? //有効月
+  card__exp_year   Int? //有効年
+  card__last_4     String? //カードの下四桁
+
+  //現金だったとき
+  cash__recieved_price Int? //お預かり額
+  cash__change_price   Int? //お釣り額
+
+  //銀行振込だった時（店側から振り込む時）
+  bank__info String? @db.Text() //銀行振込の情報などを自由記述で入力する
+  bank__checked Boolean @default(false) @db.UnsignedTinyInt() //銀行振込をしたかどうかのチェック
+}

@@ -1,0 +1,43 @@
+query getOrder($orderId: ID!) {
+  order(id: $orderId) {
+    id
+    name
+    createdAt
+    email
+    shippingAddress {
+      address1
+      address2
+      city
+      firstName
+      lastName
+      phone
+      province
+      zip
+    }
+    totalPrice
+    displayFulfillmentStatus
+    displayFinancialStatus
+    lineItems(first: 100) {
+      edges {
+        node {
+          quantity
+          variant {
+            id
+            price
+          }
+        }
+      }
+    }
+    totalTax
+    paymentGatewayNames
+    totalShippingPrice
+    note
+    processedAt
+    shippingLines(first: 10) {
+      nodes {
+        price
+        title
+      }
+    }
+  }
+}

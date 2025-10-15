@@ -1,0 +1,146 @@
+{
+  "$schema": "https://turborepo.org/schema.json",
+  "globalDependencies": [
+    "pnpm-lock.yaml",
+    "envs/.env.local",
+    "envs/.env.stg",
+    "envs/.env.prod",
+    "envs/.env.public-prod",
+    "envs/.env.customer-prod"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "dist/**"]
+    },
+
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "outputs": []
+    },
+    "prisma:generate": {
+      "cache": true,
+      "outputs": [
+        "node_modules/.prisma/**",
+        "node_modules/@prisma/client/**",
+        "**/generated/prisma/**",
+        "prisma/generated/**"
+      ]
+    },
+    "backend-core#prisma:generate": {
+      "cache": true,
+      "outputs": ["node_modules/.prisma/**", "node_modules/@prisma/client/**"]
+    },
+    "api-generator#api:generate": {
+      "dependsOn": [
+        "backend-core#prisma:generate",
+        "backend-core#build",
+        "api-generator#build"
+      ],
+      "outputs": ["src/generated/client/**"],
+      "env": ["NODE_ENV"]
+    },
+    "api-generator#generate:dev:turbo": {
+      "dependsOn": [
+        "backend-core#prisma:generate",
+        "backend-core#build",
+        "api-generator#build"
+      ],
+      "outputs": ["src/generated/client/**"],
+      "env": ["NODE_ENV"]
+    },
+    "api-generator#generate:stg:turbo": {
+      "dependsOn": [
+        "backend-core#prisma:generate",
+        "backend-core#build",
+        "api-generator#build"
+      ],
+      "outputs": ["src/generated/client/**"],
+      "env": ["NODE_ENV"]
+    },
+    "api-generator#generate:prod:turbo": {
+      "dependsOn": [
+        "backend-core#prisma:generate",
+        "backend-core#build",
+        "api-generator#build"
+      ],
+      "outputs": ["src/generated/client/**"],
+      "env": ["NODE_ENV"]
+    },
+    "api-generator#generate:public-prod:turbo": {
+      "dependsOn": [
+        "backend-core#prisma:generate",
+        "backend-core#build",
+        "api-generator#build"
+      ],
+      "outputs": ["src/generated/client/**"],
+      "env": ["NODE_ENV"]
+    },
+    "api-generator#generate:customer-prod:turbo": {
+      "dependsOn": [
+        "backend-core#prisma:generate",
+        "backend-core#build",
+        "api-generator#build"
+      ],
+      "outputs": ["src/generated/client/**"],
+      "env": ["NODE_ENV"]
+    },
+    "web-app#build": {
+      "dependsOn": ["^build", "api-generator#generate:prod:turbo"],
+      "outputs": [".next/**"],
+      "env": ["NODE_ENV", "NEXT_PUBLIC_API_URL"]
+    },
+    "web-app#dev": {
+      "dependsOn": ["^build", "api-generator#generate:dev:turbo"],
+      "cache": false,
+      "persistent": true
+    },
+    "worker-ec-order#build": {
+      "dependsOn": ["common#build", "backend-core#build"],
+      "outputs": ["dist/**"]
+    },
+    "worker-item#build": {
+      "dependsOn": ["common#build", "backend-core#build"],
+      "outputs": ["dist/**"]
+    },
+    "worker-product#build": {
+      "dependsOn": ["common#build", "backend-core#build"],
+      "outputs": ["dist/**"]
+    },
+    "worker-transaction#build": {
+      "dependsOn": ["common#build", "backend-core#build"],
+      "outputs": ["dist/**"]
+    },
+    "worker-scheduled#build": {
+      "dependsOn": ["common#build", "backend-core#build"],
+      "outputs": ["dist/**"]
+    },
+    "worker-external-ec#build": {
+      "dependsOn": ["common#build", "backend-core#build"],
+      "outputs": ["dist/**"]
+    },
+    "worker-notification#build": {
+      "dependsOn": ["common#build", "backend-core#build"],
+      "outputs": ["dist/**"]
+    },
+    "backend-service-outbox#build": {
+      "dependsOn": ["common#build", "backend-core#build"],
+      "outputs": ["dist/**"]
+    },
+    "job-ensure-consistency#build": {
+      "dependsOn": ["common#build", "backend-core#build"],
+      "outputs": ["dist/**"]
+    },
+    "job-daily#build": {
+      "dependsOn": ["common#build", "backend-core#build"],
+      "outputs": ["dist/**"]
+    },
+    "samBuild": {
+      "dependsOn": ["^samBuild"],
+      "outputs": ["dist/**", ".aws-sam/**"]
+    }
+  }
+}

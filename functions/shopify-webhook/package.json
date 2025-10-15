@@ -1,0 +1,21 @@
+{
+  "name": "function-shopify-webhook",
+  "version": "0.1.0",
+  "private": true,
+  "main": "app.js",
+  "scripts": {
+    "samBuild": "sam build",
+    "deploy:staging": "sam deploy --config-env staging",
+    "deploy:production": "sam deploy --config-env production"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7",
+    "dotenv-cli": "^7.4.2",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.797.0",
+    "@types/aws-lambda": "^8.10.149",
+    "aws-lambda": "^1.0.7"
+  }
+}

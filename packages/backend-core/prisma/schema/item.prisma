@@ -1,0 +1,643 @@
+//商品マスタ関連
+enum ItemStatus {
+  DRAFT //下書き
+  PUBLISH //公開されている状態
+  HIDDEN //非表示中の状態
+  DELETED //どこにも表示されないし、復活できない
+}
+
+//アイテム これが商品マスタに相当する
+model Item {
+  id                Int   @db.UnsignedInt()   @id @default(autoincrement()) /// @zod.number.describe('商品マスタID')
+  store_id          Int  @db.UnsignedInt() /// @zod.number.describe('店舗ID')
+  store             Store   @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  display_name      String? /// @zod.string.describe('消費者に見える商品名')
+  display_name_ruby String? /// @zod.string.describe('ふりがな')
+  sell_price        Int @default(0) /// @zod.number.describe('販売用の基準価格')
+  buy_price         Int @default(0) /// @zod.number.describe('買取用の基準価格')
+  
+  category_id Int  @db.UnsignedInt() /// @zod.number.describe('カテゴリID')
+  category Item_Category @relation(fields: [category_id], references: [id], onDelete: Cascade) //カテゴリ
+
+  genre_id           Int?  @db.UnsignedInt() /// @zod.number.describe('ジャンルID')
+  genre              Item_Genre?              @relation(fields: [genre_id], references: [id], onDelete: Cascade)
+
+  @@index([status, category_id, genre_id]) //論理削除対策
+
+  //groupは使わないかも
+  group_id Int?  @db.UnsignedInt() /// @zod.number.describe('Group ID')
+  group Item_Group? @relation(fields: [group_id], references: [id], onDelete: SetNull)
+
+  search_keyword String? @db.VarChar(500) @default(dbgenerated()) /// @zod.string.describe('検索キーワード')
+  
+  //ngram parser
+  // @@fulltext([search_keyword,rarity,expansion]) 
+
+  //JANコードなど
+  readonly_product_code String? /// @zod.string.describe('JAN Code')
+
+  is_buy_only Boolean @default(false) @db.UnsignedTinyInt() //買取でしか使わない商品マスタかどうか [いつか廃止予定]
+  //ここで買取専用商品なのか、販売専用商品なのか定義する
+  
+  allow_auto_print_label Boolean @default(true) @db.UnsignedTinyInt() //ラベル印刷を自動で行うかどうか（デフォルトはtrue）
+  allow_round Boolean @default(true) @db.UnsignedTinyInt() //在庫価格算出の時に端数処理を有効にするかどうか（デフォルトは有効）
+
+  //[TODO] Myca特有の情報についてはMyca_Itemテーブルで管理するようにしたい　おそらくoption1とかcard_typeとかパックIDとかが該当
+  
+  rarity     String? @db.VarChar(30) /// @zod.string.describe('レアリティ')
+  @@index([rarity])
+
+  //[TODO] myca_item特有のカラムについてはMyca_Itemテーブルで管理するようにしたい
+
+  pack_name  String? @db.VarChar(100) /// @zod.string.describe('封入パック名')
+  expansion  String? @db.VarChar(20) /// @zod.string.describe('エキスパンション')
+  @@index([expansion])
+  
+  cardnumber String? @db.VarChar(30) /// @zod.string.describe('Card番号')
+  @@index([cardnumber])
+
+  keyword    String?  @db.VarChar(500) /// @zod.string.describe('Keyword')
+  cardseries String? @db.VarChar(100) /// @zod.string.describe('Card Series')
+  @@index([cardseries])
+
+  card_type String? @db.VarChar(30) /// @zod.string.describe('タイプ')
+  @@index([card_type])
+
+  option1 String? @db.VarChar(100) /// @zod.string.describe('オプション1')
+  @@index([option1])
+
+  option2 String? @db.VarChar(100) /// @zod.string.describe('オプション2')
+  @@index([option2])
+
+  option3 String? @db.VarChar(100) /// @zod.string.describe('オプション3')
+  @@index([option3])
+
+  option4 Int? /// @zod.number.describe('オプション4')
+  @@index([option4])
+
+  option5 String? @db.VarChar(500) /// @zod.string.describe('オプション5')
+  @@index([option5])
+
+  option6 String? @db.VarChar(200) /// @zod.string.describe('オプション6')
+  @@index([option6])
+
+  // market_price Int? //市場相場価格（アプリ上のpriceに相当）
+  release_date String? /// @zod.string.describe('公開日 文字列')
+  release_at DateTime? @db.Timestamp(0) /// @zod.date.describe('厳密な公開日時 Date型')
+  displaytype1 String?  @db.VarChar(20) /// @zod.string.describe('アプリ上のdisplaytype1')
+  displaytype2 String?  @db.VarChar(20) /// @zod.string.describe('アプリ上のdisplaytype2')
+  weight Int @default(0) /// @zod.number.describe('重量')
+
+  
+  
+  order_number Int @default(0) /// @zod.number.describe('表示順')
+
+  products_stock_number Int @default(0) /// @zod.number.describe('結びついている商品の合計在庫数')
+  //無限商品（在庫を追跡しない商品）
+  infinite_stock   Boolean @default(false) @db.UnsignedTinyInt() //trueだったら無限（売れても在庫調整されない）
+
+  //以下のフィールドはオリパ・バンドル専用であるため、これ以上増える場合はテーブルを別にする可能性が高い
+  init_stock_number Int? /// @zod.number.describe('初期在庫数 主にオリパ用')
+  expire_at         DateTime? @db.Date() /// @zod.date.describe('有効期限')
+  start_at DateTime? @db.Date() /// @zod.date.describe('公開開始日時')
+  
+  tablet_allowed Boolean @db.UnsignedTinyInt() @default(true) //在庫検索タブレットで表示するのを許可されているかどうか
+
+  status ItemStatus @default(PUBLISH) //DRAFTは主にオリパ作成時用
+  @@index([status, myca_item_id])
+
+  description             String?                  @db.Text() /// @zod.string.describe('説明')
+  myca_item_id            Int? /// @zod.number.describe('MycaアイテムID')
+  myca_item Myca_Item? @relation(fields: [myca_item_id], references: [myca_item_id], onDelete: SetNull)
+
+  myca_pack_id            Int? /// @zod.number.describe('MycaパックID')
+  box_pack_count Int? /// @zod.number.describe('このアイテムがボックスだった時、中にいくつのパックを内包しているのかの数 cartonの場合中のボックスの数')
+
+  //primaryパックのID
+  myca_primary_pack_id Int? /// @zod.number.describe('MycaのプライマリパックID')
+
+  carton_item_id Int? @db.UnsignedInt() @unique /// @zod.number.describe('cartonマスタのID')
+  carton_item Item? @relation("cartonItem", fields: [carton_item_id], references: [id], onDelete: SetNull)
+  inner_box_item Item? @relation("cartonItem")
+  
+  image_url               String?                  @db.Text() /// @zod.string.describe('画像URL')
+
+  @@index([myca_pack_id])
+
+  products                Product[] //この商品マスタを参照している販売用の商品
+  original_pack_products  Original_Pack_Product[] //オリパの定義
+  bundle_item_products    Bundle_Item_Product[] //バンドル商品の定義
+  purchase_table_items Purchase_Table_Item[]
+  mapping_from Item_Mapping[] @relation("fromItem")
+  mapping_to Item_Mapping[] @relation("toItem")
+
+  //タグの選択も必要なのでは？ ECの時で大丈夫らしい
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  @@unique([store_id, myca_item_id])
+  @@index([id, myca_item_id])
+
+  //市場価格が変動した日時 Mycaアイテム自体をマスタ管理することになったため廃止予定
+  market_price_updated_at DateTime? @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe('最終相場価格更新日時')
+  market_price Int? /// @zod.number.describe('市場相場価格')
+  previous_market_price Int? /// @zod.number.describe('前回の市場相場価格')
+  
+  @@index([market_price])
+
+
+
+  //あくしゅさん作成インデックス
+  @@index(fields: [store_id, myca_item_id(sort: Desc), order_number(sort: Desc), id(sort: Desc)])
+
+
+  //generated column
+  market_price_gap_rate Int? @default(dbgenerated()) /// @zod.number.describe('前回市場相場価格との差')
+
+
+  //以下、 [category対応廃止予定]
+  type ItemType @default(NORMAL) //商品マスタタイプ [category対応廃止予定]
+  jan_code                 BigInt? /// @zod.bigint.describe('廃止予定')
+  department_id           Int?  @db.UnsignedInt() /// @zod.number.describe('廃止予定')
+  department              Department?              @relation(fields: [department_id], references: [id], onDelete: SetNull) //SetNullにすることで手動追加部門が削除された時に部門が特に結びついていない商品マスタとなる
+  hidden_products  Boolean @default(false) @db.UnsignedTinyInt() //結びついている在庫を隠すかどうか
+  jan_code_as_product_code Boolean @default(false) @db.UnsignedTinyInt()
+
+
+
+
+}
+
+// Mycaアイテムのマスタ 本体はアプリDBにあるため、ここではPOSに必要な最低限のもののみ管理する
+model Myca_Item {
+  myca_item_id Int @id
+  pos_items Item[] //このマスタ紐づいているposのアイテム
+
+  //市場価格が変動した日時
+  market_price_updated_at DateTime? @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe('最終相場価格更新日時')
+  market_price Int? /// @zod.number.describe('市場相場価格')
+  previous_market_price Int? /// @zod.number.describe('前回の市場相場価格')
+  
+  @@index([market_price])
+  @@index([market_price_updated_at])
+
+  
+  ec_wish_list_products Ec_Wish_List_Product[] //ECほしい物リスト内の商品
+
+  market_price_gap_rate Int? @default(dbgenerated()) /// @zod.number.describe('前回市場相場価格との差')
+}
+
+//独自商品マスタのマッピング（店舗間在庫移動のやつ）
+//myca_item_idが入っていないItemが対象
+model Item_Mapping {
+  from_store_id Int @db.UnsignedInt()
+  to_store_id Int @db.UnsignedInt()
+  store_relation Store_Relation @relation(fields: [from_store_id, to_store_id], references: [from_store_id, to_store_id], onDelete: Cascade)
+
+  from_item_id Int @db.UnsignedInt()
+  from_item Item @relation("fromItem", fields: [from_item_id], references: [id], onDelete: Cascade)
+  to_item_id Int @db.UnsignedInt()
+  to_item Item @relation("toItem", fields: [to_item_id], references: [id], onDelete: Cascade)
+
+  @@id([from_item_id, to_item_id])
+}
+
+
+//Itemに対するバッチ処理のログ
+enum ItemCalculateKind {
+  BUNDLE //バンドルのステータス計算
+}
+model Item_Calculate_History {
+  id         Int   @db.UnsignedInt()     @id @default(autoincrement())
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  //終了日時に相当
+  updated_at DateTime                    @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  kind ItemCalculateKind
+
+  log_text String? @db.Text
+}
+
+//システムで管理する商品種別
+enum ItemCategoryHandle {
+  CARD //カード
+  BOX //ボックス
+  ORIGINAL_PACK //オリパ
+  LUCKY_BAG //福袋（オリパと扱いは同じ）
+  DECK //デッキ（オリパと扱いは同じ）
+  BUNDLE //バンドル
+  STORAGE //ストレージ
+  PURCHASE_GUARANTEE //買取保証
+  OTHER //その他
+}
+
+//商品種別
+model Item_Category {
+  id                Int   @db.UnsignedInt()   @id @default(autoincrement())
+  display_name      String //種別名
+  store_id          Int  @db.UnsignedInt()
+  store             Store   @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  handle ItemCategoryHandle?  //商品種別ハンドル（カード・ボックス・オリパ・バンドル）
+  @@unique([store_id, handle]) //ストアごとに保持できる、システムで管理する商品種別は一意
+  @@unique([store_id, display_name])
+
+  hidden               Boolean      @default(false) @db.UnsignedTinyInt() //非表示中かどうか
+  deleted           Boolean      @default(false) @db.UnsignedTinyInt() //論理削除されているか否か
+  @@index([deleted, hidden])
+
+  ec_enabled Boolean @default(false) @db.UnsignedTinyInt() //ECで扱っているかどうか（扱っていなかったら在庫数など自動調整されない）
+  @@index([ec_enabled, id])
+
+  order_number Int @default(0) /// @zod.number.describe('表示順')
+
+  condition_options Item_Category_Condition_Option[] //状態選択肢の定義
+  groups Item_Group[] //商品マスタグループ
+  items Item[] //このカテゴリに結びついている商品マスタ
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  inventories Inventory[] //参照されている棚卸
+  sale_departments Sale_Department[] //参照されているセールの部門指定部分
+  inventory_item_categories Inventory_Category[]
+  tablet_allowed_categories Tablet_Allowed_Genre_Category[]
+
+  mapping_from Item_Category_Mapping[] @relation("fromCategory")
+  mapping_to Item_Category_Mapping[] @relation("toCategory")
+}
+
+//独自カテゴリのマッピング（店舗間在庫移動用） handleがnullなカテゴリのみ対応
+model Item_Category_Mapping {
+  from_store_id Int @db.UnsignedInt()
+  to_store_id Int @db.UnsignedInt()
+  store_relation Store_Relation @relation(fields: [from_store_id, to_store_id], references: [from_store_id, to_store_id], onDelete: Cascade)
+
+  from_category_id Int @db.UnsignedInt()
+  from_category Item_Category @relation("fromCategory", fields: [from_category_id], references: [id], onDelete: Cascade)
+  to_category_id Int @db.UnsignedInt()
+  to_category Item_Category @relation("toCategory", fields: [to_category_id], references: [id], onDelete: Cascade)
+
+  @@id([from_category_id, to_category_id])
+}
+
+enum ConditionOptionHandle {
+  O1_S
+  O2_A //カードの状態A
+  O3_FOR_PLAY //プレイ用
+  O4_B //カードの状態B
+  O5_C //カードの状態C
+  O6_D //カードの状態D
+  O1_BRAND_NEW //新品
+  O2_LIKE_NEW //未使用
+  O3_USED //中古
+}
+
+//商品種別ごとの状態選択肢の種類（割合や四捨五入などの設定はここでは定義しない）
+model Item_Category_Condition_Option {
+  id                Int    @db.UnsignedInt()  @id @default(autoincrement()) /// @zod.number.describe('ID（状態選択肢のIDとして使うID）')
+  item_category_id Int  @db.UnsignedInt() /// @zod.number.describe('カテゴリのID')
+  item_category Item_Category  @relation(fields: [item_category_id], references: [id], onDelete: Cascade)
+  
+  display_name String /// @zod.string.describe('状態名')
+  handle ConditionOptionHandle? //システムで管理する状態名（EC連携時に、カードコンディションでのみ利用する）
+  // tablet_allowed Boolean @default(true) @db.UnsignedTinyInt() //在庫検索タブレットで表示するかどうか
+
+  deleted Boolean @default(false) @db.UnsignedTinyInt() //論理削除されているか否か
+  @@index([item_category_id,deleted])
+  @@index([id, handle])
+
+  description        String?     //選択肢の説明（Aだったら超状態が良いなど）
+
+  order_number Int @default(0) /// @zod.number.describe('表示順')
+
+  rate_variants Condition_Option_Rate[] //割合の種類
+  products Product[] //この選択肢を使っている在庫
+  appraisal_products Appraisal_Product[]
+  tablet_allowed_genres_categories Tablet_Allowed_Genre_Category[] //このジャンルがタブレットで許可されていたらここに値が入る
+
+  @@unique([item_category_id, handle])
+
+  mapping_from Item_Category_Condition_Option_Mapping[] @relation("fromOption")
+  mapping_to Item_Category_Condition_Option_Mapping[] @relation("toOption")
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+//状態のマッピング（店舗間在庫移動用） カードのマッピングのみ
+model Item_Category_Condition_Option_Mapping {
+  from_store_id Int @db.UnsignedInt()
+  to_store_id Int @db.UnsignedInt()
+  store_relation Store_Relation @relation(fields: [from_store_id, to_store_id], references: [from_store_id, to_store_id], onDelete: Cascade)
+
+  from_option_id Int @db.UnsignedInt()
+  from_option Item_Category_Condition_Option @relation("fromOption", fields: [from_option_id], references: [id], onDelete: Cascade)
+  to_option_id Int @db.UnsignedInt()
+  to_option Item_Category_Condition_Option @relation("toOption", fields: [to_option_id], references: [id], onDelete: Cascade)
+
+  @@id([from_option_id, to_option_id])
+}
+
+
+//状態選択肢の自動価格調整設定
+model Condition_Option_Rate {
+  id                Int    @db.UnsignedInt()  @id @default(autoincrement()) //ID（こちらのIDは基本的に使わないことが多い）
+
+  option_id Int  @db.UnsignedInt() //選択肢ID
+  option Item_Category_Condition_Option @relation(fields: [option_id], references: [id], onDelete: Cascade)
+
+  group_id Int?  @db.UnsignedInt() //特定の商品マスタグループについての選択肢ならこれを入れる nullだったら規定ということになる
+  group Item_Group? @relation(fields: [group_id], references: [id], onDelete: Cascade) //商品マスタグループ
+  
+  genre_id Int?  @db.UnsignedInt() //特定の商品マスタジャンルについての選択肢ならこれを入れる nullだったら規定ということになる
+  genre Item_Genre? @relation(fields: [genre_id], references: [id], onDelete: Cascade) //商品マスタジャンル
+
+  @@unique([option_id, group_id, genre_id])
+
+  auto_sell_price_adjustment String /// @zod.string.describe('販売価格 調整量')
+  auto_buy_price_adjustment  String /// @zod.string.describe('買取価格 調整量')
+
+
+  //以下、廃止予定（ストアで管理するため）
+  auto_sell_price_adjustment_round_rule ConditionOptionRateRoundRule? //販売価格調整の切り上げor切り捨てor四捨五入
+  auto_buy_price_adjustment_round_rule  ConditionOptionRateRoundRule? //買取価格調整の切り上げor切り捨てor四捨五入
+
+  auto_sell_price_adjustment_round_rank Int? //1の位を切り上げ、切り捨て、四捨五入して10の位から有効にしたいときは10を指定する
+  auto_buy_price_adjustment_round_rank  Int? //1の位を切り上げ、切り捨て、四捨五入して10の位から有効にしたいときは10を指定する
+
+}
+
+//商品マスタグループ
+model Item_Group {
+  id                Int    @db.UnsignedInt()  @id @default(autoincrement())
+  item_category_id Int  @db.UnsignedInt()
+  item_category Item_Category @relation(fields: [item_category_id], references: [id], onDelete: Cascade)
+  display_name      String //グループ名
+  description String? //説明など
+
+  items Item[] //紐づいている商品マスタ
+
+  condition_option_rates Condition_Option_Rate[] //紐づいている状態選択肢割合
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+}
+
+//商品マスタジャンル（ポケモンなど）
+model Item_Genre {
+  id                Int   @db.UnsignedInt()   @id @default(autoincrement())
+  store_id          Int  @db.UnsignedInt()
+  store             Store   @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  display_name String /// @zod.string.describe("ジャンル名")
+  handle String? //システムが管理するものは値を入れる 動的に増えていくためこちらはenumにしない
+  @@unique([store_id, handle])
+  @@unique([store_id, display_name])
+
+  items Item[] //紐づいている商品マスタ
+
+  description String? //ジャンルの説明
+  auto_update          Boolean      @default(false) @db.UnsignedTinyInt() //自動更新をオンにしているかどうか
+  hidden               Boolean      @default(false) @db.UnsignedTinyInt() //非表示中かどうか
+  deleted           Boolean      @default(false) @db.UnsignedTinyInt() //論理削除されているか否か
+  @@index([deleted, hidden])
+
+  ec_enabled Boolean @default(false) @db.UnsignedTinyInt() //ECで扱っているかどうか（扱っていなかったら在庫数など自動調整されない）
+  @@index([ec_enabled, id])
+
+  order_number Int @default(0) /// @zod.number.describe('表示順')
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  condition_option_rates Condition_Option_Rate[]
+  inventories Inventory[] //参照されている棚卸
+  sale_departments Sale_Department[] //参照されているセールの部門指定部分
+  inventory_item_genres Inventory_Genre[]
+  tablet_allowed_genres Tablet_Allowed_Genre_Category[] //このジャンルがタブレットで許可されていたらここに値が入る
+
+  mapping_from Item_Genre_Mapping[] @relation("fromGenre")
+  mapping_to Item_Genre_Mapping[] @relation("toGenre")
+
+}
+
+//ジャンルのマッピング（店舗間在庫移動用） handleがnullなジャンルのみ対応
+model Item_Genre_Mapping {
+  from_store_id Int @db.UnsignedInt()
+  to_store_id Int @db.UnsignedInt()
+  store_relation Store_Relation @relation(fields: [from_store_id, to_store_id], references: [from_store_id, to_store_id], onDelete: Cascade)
+
+  from_genre_id Int @db.UnsignedInt()
+  from_genre Item_Genre @relation("fromGenre", fields: [from_genre_id], references: [id], onDelete: Cascade)
+  to_genre_id Int @db.UnsignedInt()
+  to_genre Item_Genre @relation("toGenre", fields: [to_genre_id], references: [id], onDelete: Cascade)
+
+  @@id([from_genre_id, to_genre_id])
+}
+
+//在庫検索タブレットで表示するジャンル・カテゴリ・状態
+model Tablet_Allowed_Genre_Category {
+  id Int @db.UnsignedInt() @id @default(autoincrement())
+  store_id          Int  @db.UnsignedInt()
+  store             Store   @relation(fields: [store_id], references: [id], onDelete: Cascade) //店舗ID
+  item_category_id Int  @db.UnsignedInt() /// @zod.number.describe('カテゴリのID')
+  item_category Item_Category @relation(fields: [item_category_id], references: [id], onDelete: Cascade)
+  item_genre_id  Int  @db.UnsignedInt() /// @zod.number.describe('ジャンルのID')
+  item_genre Item_Genre @relation(fields: [item_genre_id], references: [id], onDelete: Cascade)
+  condition_option_id Int?  @db.UnsignedInt() /// @zod.number.describe('状態選択肢のID nullだったら指定なしということになる')
+  condition_option Item_Category_Condition_Option? @relation(fields: [condition_option_id], references: [id], onDelete: Cascade)
+  specialty_id Int?  @db.UnsignedInt() /// @zod.number.describe('特別状態のID nullだったら指定なしということになる')
+  specialty Specialty? @relation(fields: [specialty_id], references: [id], onDelete: Cascade)
+  no_specialty Boolean @default(false) @db.UnsignedTinyInt() //特殊状態なしじゃないといけないパターン
+  limit_count Int @db.UnsignedInt() @default(0) /// @zod.number.describe('このジャンルの在庫数の上限 0は無制限')
+  @@unique([store_id, item_category_id, item_genre_id, condition_option_id, specialty_id])
+}
+
+
+//販売・買取価格の履歴　トリガーによって自動挿入される 使わないため廃止
+// model Item_Price {
+//   item_id Int  @db.UnsignedInt() //Item.idに対応
+//   item    Item            @relation(fields: [item_id], references: [id], onDelete: Cascade)
+//   kind    TransactionKind //buy | sell sellは販売用価格
+//   date    DateTime        @default(dbgenerated("(CURRENT_DATE())")) @db.Date() //価格の日付
+//   price   Int
+
+//   @@id([item_id, kind, date])
+// }
+
+//オリパのの定義自体は商品マスタを使って行う その商品マスタに結びついている、特に状態をもっていない在庫を生成し、それを販売の実体とする
+//こうすることで、従来のパック商品に限りなく扱いを近づけることができる
+//なお、従来のパックの定義では商品マスタが束ねられているのに対して、オリパでは商品マスタではなく在庫を束ねる形になっている
+
+//[TODO] 担当者ごとに送信した在庫がわかる様にstaff_account_id入れるかも
+model Original_Pack_Product {
+  item_id    Int  @db.UnsignedInt() //Item.idに対応
+  item       Item    @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  product_id Int  @db.UnsignedInt() //定義上の在庫ID
+  product    Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  item_count Int //この在庫何個分なのか
+  staff_account_id      Int  @db.UnsignedInt() //この定義を送信した担当者
+  staff_account         Account @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+
+  process_id String @db.VarChar(20) @default("original") //処理ID 補充モードの時はここに値を入れて、過去のものと見分けをつける
+
+  //仕入れ値は仕入れ値テーブルで管理
+  wholesale_price Int? //削除予定
+  @@id([item_id, process_id, staff_account_id, product_id])
+}
+
+//バンドル商品の定義 Original_Pack_Productと統合してもいいが、一旦いいや
+model Bundle_Item_Product {
+  item_id    Int  @db.UnsignedInt() //Item.idに対応
+  item       Item    @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  product_id Int  @db.UnsignedInt() //定義上の在庫ID
+  product    Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  item_count Int //個数
+
+  @@id([item_id, product_id])
+}
+
+
+
+
+
+//買取表
+enum PurchaseTableFormat {
+  HORIZONTAL_8 //横長8枚
+  HORIZONTAL_18 //横長18枚
+  HORIZONTAL_36 //横長36枚
+  VERTICAL_4 //縦長4枚
+  VERTICAL_9 //縦長9枚
+  VERTICAL_16 //縦長16枚
+  VERTICAL_25 //縦長25枚
+  SQUARE_2 //正方形2枚
+  SQUARE_6 //正方形6枚
+  MONITOR_3 //モニター3枚
+  MONITOR_12 //モニター12枚
+  ENHANCED_1 //強化買取1枚
+  ENHANCED_2 //強化買取2枚
+}
+
+//並び順
+enum PurchaseTableOrder {
+  PRICE_DESC
+  PRICE_ASC
+  CUSTOM //リスト順
+}
+model Purchase_Table {
+
+  id           Int    @db.UnsignedInt()  @id @default(autoincrement())
+  title String //タイトル
+  format PurchaseTableFormat //フォーマット
+  order PurchaseTableOrder //並び順
+  color String //カード名背景カラー（HEX）
+  background_text_color String? //背景文字カラー（HEX）
+  cardname_and_price_text_color String? //カード名と価格の文字カラー（HEX）
+  custom_template_image_url String? //カスタムテンプレートを使う場合のURL（このテンプレートでOKかどうかバリデーションする必要あり）
+  comment String? @db.VarChar(150) //注意事項
+  staff_account_id      Int  @db.UnsignedInt() //担当者
+  staff_account         Account @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  store_id     Int  @db.UnsignedInt()
+  store        Store   @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  show_store_name  Boolean  @default(true) @db.UnsignedTinyInt() //店舗名を載せるかどうか
+
+  genre_handle String? @db.VarChar(20) //ジャンルハンドル アプリ上におけるジャンル名 Item_Genre.handleに相当
+  display_on_app Boolean @default(false) @db.UnsignedTinyInt() //アプリで表示するかどうか
+  published_at DateTime? @db.Timestamp(0) //アプリで表示を設定した日時
+
+  //完成した買取表画像のURL
+  generated_images Purchase_Table_Generated_Image[] 
+
+  items Purchase_Table_Item[] //商品定義
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+//完成した画像
+model Purchase_Table_Generated_Image {
+  purchase_table_id Int @db.UnsignedInt()
+  purchase_table Purchase_Table @relation(fields: [purchase_table_id], references: [id], onDelete: Cascade)
+  order_number Int //順番1から順に
+  image_url String @db.VarChar(300) 
+
+  @@id([purchase_table_id, order_number])
+}
+
+
+//買取表の商品定義
+model Purchase_Table_Item {
+  purchase_table_id Int @db.UnsignedInt()
+  purchase_table Purchase_Table @relation(fields: [purchase_table_id], references: [id], onDelete: Cascade)
+  item_id Int  @db.UnsignedInt()
+  item Item @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  order_number Int //並び順（1から順に）　これはバックエンドで入れる
+  display_price Int @db.UnsignedInt() //掲載価格
+  any_model_number Boolean  @default(false) @db.UnsignedTinyInt() //型番問わなかったらtrue
+  is_psa10 Boolean @default(false) @db.UnsignedTinyInt() //PSA10のカードかどうか
+
+  @@id([purchase_table_id, item_id])
+} 
+
+
+
+
+
+
+
+
+
+
+
+
+
+//以下、すべて  [category対応廃止予定]
+
+
+enum ConditionOptionRateRoundRule {
+  up
+  down
+  round
+}
+
+
+enum ConditionOptionRoundRule { //名前変えたいため  [category対応廃止予定]
+  up
+  down
+  round
+}
+
+//商品に結びつける部門の定義テーブル  [category対応廃止予定]
+model Department {
+  id               Int    @db.UnsignedInt()   @id @default(autoincrement())
+  store_id         Int  @db.UnsignedInt() //どの店舗の部門か
+  store            Store    @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  staff_account_id Int?  @db.UnsignedInt() //登録時の担当者
+  staff_account    Account? @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  display_name     String? //部門の表示名 オリジナルの名前
+  handle           String? //ハンドル名 ストアで一意 基本的に今の所、クライアントが自由にカスタマイズできるものではない
+
+  parent_department_id Int?  @db.UnsignedInt() //Department.idに相当
+  parent_department    Department?  @relation("parentChildRelationship", fields: [parent_department_id], references: [id], onDelete: Cascade)
+  child_department     Department[] @relation("parentChildRelationship")
+  description          String?      @db.Text() //部門の説明
+  is_auto_registered   Boolean      @default(false) @db.UnsignedTinyInt() //Mycaからの商品インポートによって自動的に作られた部門かどうか デフォルト値はfalse
+  auto_update          Boolean      @default(false) @db.UnsignedTinyInt() //自動更新をオンにしているかどうか
+  hidden               Boolean      @default(false) @db.UnsignedTinyInt() //非表示中かどうか
+  is_deleted           Boolean      @default(false) @db.UnsignedTinyInt() //論理削除されているか否か
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  items            Item[] //参照元のアイテム
+  sale_departments Sale_Department[] //参照元のセール定義部門
+  inventories      Inventory[]
+
+  //handleはカード、ボックスなどで、その子カテゴリの場合カード_ポケモンみたいな感じになる あとはバンドル、福袋、オリパなども固定で入る
+  @@unique([store_id, handle])
+}
+
+//今後は商品マスタにもタイプを設けることにする
+//今後ProductTypeは消えてItemTypeだけになる可能性も高い
+enum ItemType {
+  NORMAL //デフォルト値 ProductのNORMALに相当
+  ORIGINAL_PACK //オリジナルパック
+  BUNDLE //バンドル
+}

@@ -1,0 +1,986 @@
+//在庫関連
+
+
+//入荷のステータス
+enum StockingStatus {
+  NOT_YET //未入荷
+  FINISHED //入荷済
+  CANCELED //キャンセル済み
+  ROLLBACK //取り消し済み
+}
+
+//仕入れ
+model Stocking {
+  id                    Int     @db.UnsignedInt()            @id @default(autoincrement())
+  store_id              Int  @db.UnsignedInt() //どの店舗の部門か
+  store                 Store              @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  from_store_shipment            Store_Shipment? @relation() //他店舗からの出荷による入荷だった場合
+  status                StockingStatus     @default(NOT_YET) //ステータス
+  planned_date          DateTime           @db.Date() //仕入れ予定日
+  actual_date           DateTime?          @db.Date() //実際の仕入れ日 確定するまでは入れないためオプショナル
+  expected_sales        Int? //見込みの売上（入荷を実行した時にのみ格納される　予定の段階では入らない）
+  total_wholesale_price Int? //実際の合計仕入れ値
+  total_item_count      Int? //実際の合計仕入れ個数
+  //見込みの売上 - 合計仕入れ値が見込みの利益
+  supplier_id           Int  @db.UnsignedInt()
+  supplier              Supplier           @relation(fields: [supplier_id], references: [id], onDelete: Cascade)
+  staff_account_id      Int  @db.UnsignedInt()
+  staff_account         Account            @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  stocking_products     Stocking_Product[]
+  created_at            DateTime           @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  @@index([store_id, status])
+}
+
+//仕入れたもの
+model Stocking_Product {
+  //stocking_id, product_idの組み合わせでユニークにできないため、IDを設立
+  id                 Int    @db.UnsignedInt()   @id @default(autoincrement())
+  stocking_id        Int  @db.UnsignedInt()
+  stocking           Stocking @relation(fields: [stocking_id], references: [id], onDelete: Cascade)
+  product_id         Int  @db.UnsignedInt()
+  product            Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  planned_item_count Int //予定の数
+  actual_item_count  Int? //実際の数 確定するまではいれないためオプショナル
+  unit_price         Int? //税込価格 税込登録モードで登録したときの値 税抜登録モードの時はここはnullを指定
+  unit_price_without_tax Int? //税抜き価格 税抜き登録モードで登録したときの値 編集などができるように保持しておく 税込登録モードの時はここはnullを指定
+}
+
+//仕入れ先
+model Supplier {
+  id           Int   @db.UnsignedInt()   @id @default(autoincrement())
+  code         String? //仕入れ先コード
+
+  store_id     Int  @db.UnsignedInt() //どの店舗の部門か
+  store        Store   @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  // supplier_genre_id  Int? //仕入れ区分ID
+  // supplier_genre     Supplier_Genre? @relation(fields: [supplier_genre_id], references: [id], onDelete: Cascade)
+  display_name String //仕入れ先名
+  @@unique([store_id, display_name])
+
+  // display_name_short String? //仕入れ先略称
+  address      String? /// @zod.string.describe('住所（）')
+  zip_code     String? /// @zod.string.describe('郵便番号')
+  prefecture   String? /// @zod.string.describe('県')
+  order_method String? /// @zod.string.describe('発注方法')
+  city         String? /// @zod.string.describe('市区町村')
+  address2     String? /// @zod.string.describe('それ以降の住所')
+  building     String? /// @zod.string.describe('建物名など')
+  phone_number String? /// @zod.string.describe('電話番号')
+  fax_number   String? /// @zod.string.describe('FAX番号')
+  email        String? /// @zod.string.describe('mail')
+  staff_name   String? /// @zod.string.describe('担当者名（仕入れ先の）')
+  order_number Int? /// @zod.number.describe('表示順番')
+  enabled      Boolean @default(true) @db.UnsignedTinyInt() //有効かどうか
+  description  String? //備考
+  deleted                 Boolean                  @default(false) @db.UnsignedTinyInt() //論理削除
+  @@index([deleted])
+
+  stockings Stocking[] //仕入れ
+}
+
+
+//店舗に対しての出荷（店舗間在庫移動）
+enum StoreShipmentStatus {
+  NOT_YET //未出荷
+  SHIPPED //出荷済み
+  FINISHED //納品済み（出荷先の店舗での入荷納品処理済み）
+  CANCELED //キャンセル済み（一時保存してたやつのキャンセル）
+  ROLLBACK //出荷取り消し済（出荷したけど、取り消しになった）
+}
+
+model Store_Shipment {
+  id Int  @db.UnsignedInt() @id @default(autoincrement())
+  store_id Int  @db.UnsignedInt()
+  store Store @relation("fromStore", fields: [store_id], references: [id], onDelete: Cascade)
+  to_stocking_id Int?  @db.UnsignedInt() @unique //1対1で出荷/入荷を結びつける前提 出荷が確定したら値が入る形
+  to_stocking Stocking? @relation(fields: [to_stocking_id], references: [id], onDelete: Cascade)
+  to_store_id Int  @db.UnsignedInt()
+  to_store Store @relation("toStore", fields: [to_store_id], references: [id], onDelete: Cascade)
+
+  shipment_date DateTime @db.Date() /// @zod.date.describe('出荷日')
+  description String? @db.Text() /// @zod.string.describe('備考 メモ')
+  total_wholesale_price Int? /// @zod.number.describe('合計仕入れ値')
+  total_item_count Int? /// @zod.number.describe('合計商品数')
+  total_sale_price Int? /// @zod.number.describe('合計販売価格')
+
+  status StoreShipmentStatus @default(NOT_YET) //ステータス
+
+  staff_account_id      Int  @db.UnsignedInt()
+  staff_account         Account            @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+
+  products Store_Shipment_Product[]
+
+  //便利そうなのでリレーション先として置いておく
+  store_relation Store_Relation @relation(fields: [store_id, to_store_id], references: [from_store_id, to_store_id], onDelete: Cascade)
+
+  finished_at DateTime? @db.Timestamp(0) /// @zod.date.describe('納品日時')
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+//店舗間在庫移動の商品情報
+model Store_Shipment_Product {
+  id Int  @db.UnsignedInt() @id @default(autoincrement())
+  store_shipment_id Int  @db.UnsignedInt()
+  store_shipment Store_Shipment @relation(fields: [store_shipment_id], references: [id], onDelete: Cascade)
+  product_id Int  @db.UnsignedInt()
+  product Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  item_count Int /// @zod.number.describe('出荷数')
+}
+
+
+//実際に販売する在庫の情報テーブル 買取用にも作ったりする
+model Product {
+  id                  Int      @db.UnsignedInt()            @id @default(autoincrement()) /// @zod.number.describe('在庫ID')
+  store_id            Int  @db.UnsignedInt() /// @zod.number.describe('店舗ID')
+  store               Store               @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  @@index([store_id])
+  item_id             Int  @db.UnsignedInt() /// @zod.number.describe('商品マスタID')
+  item                Item               @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  is_buy_only         Boolean             @default(false) @db.UnsignedTinyInt()
+  specific_sell_price Int? /// @zod.number.describe('独自販売価格')
+  specific_buy_price  Int? /// @zod.number.describe('独自買取価格')
+  retail_price        Int? /// @zod.number.describe('小売価格（使ってない？）')
+  sell_price          Int? /// @zod.number.describe('自動算出販売価格')
+  buy_price           Int? /// @zod.number.describe('自動算出買取価格')
+  ec_sell_price Int? /// @zod.number.describe('自動算出EC販売価格')
+  specific_ec_sell_price Int? /// @zod.number.describe('EC独自販売価格')
+  
+  stock_number        Int                 @default(0) /// @zod.number.describe('在庫数')
+
+  //店舗での検索向け
+  @@index([store_id, deleted, item_id])
+  @@index([store_id, deleted, is_active, item_id])
+  @@index([store_id, deleted, stock_number, is_active])
+  @@index([store_id, deleted, is_buy_only])
+
+  pos_reserved_stock_number Int? /// @zod.number.describe('POS用におさえたい在庫数')
+  mycalinks_ec_enabled  Boolean             @default(false) @db.UnsignedTinyInt() //MycalinksのEC
+  shopify_ec_enabled  Boolean             @default(false) @db.UnsignedTinyInt() //ShopifyのEC
+  ochanoko_ec_enabled  Boolean             @default(false) @db.UnsignedTinyInt() //おちゃのこEC
+  ochanoko_product_id Int?  @db.UnsignedInt() //おちゃのこの商品ID
+  @@unique([store_id, ochanoko_product_id]) //おちゃのこの在庫IDはストアごとに一意
+
+  shopify_product_variant_id String? @db.VarChar(50) //Shopifyの商品バリエーションID
+  @@unique([store_id, shopify_product_variant_id])
+  shopify_product_id String? @db.VarChar(50) //Shopifyの商品ID
+  @@unique([store_id, shopify_product_id])
+  shopify_inventory_item_id String? @db.VarChar(50) //Shopifyの在庫アイテムID
+  @@unique([store_id, shopify_inventory_item_id])
+
+  ec_stock_number Int @default(0) /// @zod.number.describe('EC上での在庫数')
+
+  //ECでの検索向け
+  @@index([item_id, deleted, mycalinks_ec_enabled, actual_ec_sell_price, condition_option_id, ec_stock_number])
+
+  disable_ec_auto_stocking  Boolean             @default(false) @db.UnsignedTinyInt() //EC自動在庫補充を拒否するかどうか
+
+  is_active           Boolean             @default(false) @db.UnsignedTinyInt() //この商品がアクティブ（一回でも在庫が1以上になったことがあるか）かどうか
+  
+  allow_sell_price_auto_adjustment Boolean @default(true) @db.UnsignedTinyInt() //販売価格の自動調整を許すかどうか
+  allow_buy_price_auto_adjustment Boolean @default(true) @db.UnsignedTinyInt() //買取価格の自動調整を許すかどうか
+  
+  force_no_price_label Boolean @default(false) @db.UnsignedTinyInt() //必ず価格なしラベルにするかどうか（主に特価商品用）
+  specific_auto_sell_price_adjustment String? //状態によって調節された在庫用価格からさらに、特定の%だけ販売価格を調節する時用（主に特価商品用）
+
+  //以下、特殊在庫かどうかのフラグ（複数選択できるように一応別フィールド）
+  is_special_price_product  Boolean @default(false) @db.UnsignedTinyInt() //特価在庫か否か
+
+  display_name        String /// @zod.string.describe('商品名')
+  // @@fulltext([display_name]) //ngram parser
+
+  image_url                     String? /// @zod.string.describe('画像URL')
+  
+  readonly_product_code         String? /// @zod.string.describe("JAN Code")
+  @@index([store_id, readonly_product_code])
+
+  description                   String? @db.Text() /// @zod.string.describe('在庫の説明')
+  allowed_point Boolean @db.UnsignedTinyInt() @default(true) //ポイントを付与する対象在庫かどうか（デフォルトは有効）
+  tablet_allowed Boolean @db.UnsignedTinyInt() @default(true) //在庫検索タブレットで表示するのを許可されているかどうか
+  average_wholesale_price Int? /// @zod.number.describe('平均仕入れ値')
+  minimum_wholesale_price Int? /// @zod.number.describe('最低仕入れ値')
+  maximum_wholesale_price Int? /// @zod.number.describe('最高仕入れ値')
+  total_wholesale_price Int? /// @zod.number.describe('合計仕入れ値')
+  condition_option_id Int?  @db.UnsignedInt() /// @zod.number.describe('状態のID')
+  condition_option Item_Category_Condition_Option? @relation(fields: [condition_option_id], references: [id], onDelete: SetNull)
+  specialty_id Int?  @db.UnsignedInt() /// @zod.number.describe('特殊さのID')
+  specialty Specialty? @relation(fields: [specialty_id], references: [id], onDelete: SetNull)
+  management_number String? @db.VarChar(40) /// @zod.string.describe('管理番号')
+  @@index([store_id, management_number]) //ストアで一意である必要がある（値がある場合）
+
+  @@index([store_id, specialty_id])
+
+  //委託
+  consignment_client_id Int?  @db.UnsignedInt() /// @zod.number.describe('委託先ID')
+  consignment_client Consignment_Client? @relation(fields: [consignment_client_id], references: [id], onDelete: SetNull)
+
+  deleted                 Boolean                  @default(false) @db.UnsignedTinyInt() //論理削除
+
+  loss_products                 Loss_Product[]
+  sale_products                 Sale_Product[]
+
+  
+  sell_price_updated_at                    DateTime                          @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe('販売価格更新日時')
+  buy_price_updated_at                    DateTime                          @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe('買取価格更新日時')
+  created_at                    DateTime                          @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe('作成日時')
+  updated_at                    DateTime                          @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe('更新日時')
+
+  images Product_Image[] //結び付けられている画像
+
+  prices                        Product_Price[]
+  stocks                        Product_Stock_History[]
+  ec_stocks Product_Ec_Stock_History[]
+  transaction_carts             Transaction_Cart[]
+  transaction_customer_carts    Transaction_Customer_Cart[]
+  stocking_products             Stocking_Product[]
+  sale_history                  Sale_Product_History[]
+  wholesale_price_history       Product_Wholesale_Price_History[] @relation("productWholesalePrice")
+  pack_open_from_products       Pack_Open_History[]               @relation("fromProduct")
+  pack_open_to_products         Pack_Open_Products[]
+  pack_open_unregister_products Pack_Open_History[]               @relation("unregisterProduct")
+  inventory_products            Inventory_Products[]
+  set_deal_products             Set_Deal_Product[]
+  original_pack_products        Original_Pack_Product[]
+  bundle_item_products          Bundle_Item_Product[]
+  appraisal_products Appraisal_Product[] @relation("originalProduct")
+  appraisal_to_products Appraisal_Product[] @relation("toProduct")
+
+  ec_order_cart_store_products Ec_Order_Cart_Store_Product[]
+  reservations Reservation[] //予約
+
+  store_shipment_products Store_Shipment_Product[]
+  location_products Location_Product[]
+
+  //generated column
+  actual_sell_price Int? @default(dbgenerated())  /// @zod.number.describe('実際の販売価格')
+  actual_buy_price Int? @default(dbgenerated()) /// @zod.number.describe('実際の買取価格')
+  actual_ec_sell_price Int? @default(dbgenerated()) /// @zod.number.describe('ECでの実際の販売価格')
+  ec_pos_stock_gap Int? @default(dbgenerated()) /// @zod.number.describe('ECとPOSの在庫数の差')
+  specific_ec_publishable_stock_number Int? @default(dbgenerated()) /// @zod.number.describe('在庫ごとに設定されているPOS在庫確保数を考慮して算出した出品可能数 仮想カラム')
+  @@index([store_id,actual_sell_price])
+  @@index([ec_pos_stock_gap])
+
+
+
+  //以下、廃止予定
+  arrow_auto_price_adjustment           Boolean             @default(true) @db.UnsignedTinyInt() //自動価格調整を許すかどうか てかこれスペルミスしてね？
+  
+}
+
+//在庫に登録されている画像および説明
+model Product_Image {
+  id Int  @db.UnsignedInt() @id @default(autoincrement())
+  product_id Int  @db.UnsignedInt()
+  product Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  image_url String? /// @zod.string.describe('画像URL')
+  description String? @db.Text() /// @zod.string.describe('説明')
+  order_number Int @default(0) /// @zod.number.describe('表示順序 若い順に表示')
+  //POSでのみ表示するみたいなカラムも必要かも？
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+//Productの変更情報を記録するoutbox
+//Shopifyなどへの連携用
+//価格や名前など
+//在庫数はバッティング発生時に大変なことになるため別outboxテーブルで厳重に管理
+//こちらは基本的に全く同じ処理が行われても問題ない
+model Outbox_Product {
+  id Int  @db.UnsignedInt() @id @default(autoincrement()) //イベントID
+  product_id Int  @db.UnsignedInt()
+  ochanoko_product_id Int? @db.UnsignedInt()
+  shopify_product_id String? @db.VarChar(50) //Shopifyの商品ID
+  shopify_product_variant_id String? @db.VarChar(50) //Shopifyの商品バリエーションID
+  store_id Int @db.UnsignedInt()
+  
+  actual_ec_sell_price Int? //EC販売価格が変更された時はここに変更後の値が入る
+  created_at            DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+//仕入れ値紐付き特定リソースの種類
+enum WholesalePriceHistoryResourceType {
+  PRODUCT //プロダクトに直接結びついている値として
+  BUNDLE //バンドルに結びついている仕入れ値として
+  ORIGINAL_PACK //オリパに結びついている仕入れ値として
+  TRANSACTION //取引に結びついている仕入れ値として
+  STOCKING //入荷に結びついている仕入れ値として
+  PACK_OPENING //パック開封に結びついている仕入れ値として（登録商品と元商品）
+  PACK_OPENING_UNREGISTER //パック開封に結びついている仕入れ値として（未登録商品）
+  EC_ORDER //ECの注文
+  LOSS //ロスに結びついている仕入れ値として
+  APPRAISAL //鑑定に結びついている仕入れ値として
+  CHILD //仕入れ値自体に結びついている子仕入れ値として（取引後のバンドルの内訳などがこれに相当する）
+  STORE_SHIPMENT //店舗間在庫移動に結びついている仕入れ値として
+  LOCATION //ロケーションに結びついている仕入れ値として
+}
+
+//在庫の仕入れ値の履歴 他のリソースと結びついているものに関してもここでまとめる
+model Product_Wholesale_Price_History {
+  id         Int    @db.UnsignedInt()   @id @default(autoincrement()) //通しIDを作ることにする
+  product_id Int  @db.UnsignedInt() //該当の在庫ID
+  product    Product  @relation("productWholesalePrice", fields: [product_id], references: [id], onDelete: Cascade)
+  item_count Int //該当の商品数 仕入れ平均を常に仕入れ値として使う場合、この商品数=在庫数となる（全て仕入れ単価が同じということになるため）
+  unit_price Int //仕入れ単価
+  arrived_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //仕入れ平均を常に仕入れ値として使う場合、この値は最後に仕入れが発生した日時となる（全ての個体を同じ商品として扱いつつ、先入先出の概念ないため）
+  order_num  Int      @default(0) //仕入れ値の優先度 先入先出ではなく、順番がカスタマイズされた時用
+
+  is_exact Boolean @default(true) @db.UnsignedTinyInt() //正確な値かどうか 正確じゃないのはオリパ在庫の仕入れ単価など
+
+  parent_id Int?  @db.UnsignedInt() //仕入れ値自体に結びつけるものだったらそのID
+
+  parent   Product_Wholesale_Price_History?  @relation("familyWholesalePrice", fields: [parent_id], references: [id], onDelete: Cascade)
+  children Product_Wholesale_Price_History[] @relation("familyWholesalePrice")
+
+  resource_type WholesalePriceHistoryResourceType @default(PRODUCT) //PRODUCTだったら販売用在庫に直接結びついているもの なお、このレコードがオリパ在庫やバンドル在庫自体のものを表しているなら、null（バンドル在庫自体はバンドル在庫と結びついているわけではないため）
+  resource_id   Int  @db.UnsignedInt() //関連づけられているリソースのID PRODUCTの場合product_id
+
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  inventory_products Inventory_Products[]
+
+  // このインデックスはあまり意味をなさない気がしたため削除
+  // @@unique([product_id,resource_type,resource_id,unit_price,arrived_at])
+
+  @@index([resource_type])
+  @@index([product_id])
+  @@index([parent_id]) //なんかインデックスつけないとリレーション組めなかったためとりあえずつける
+  //パフォーマンスがよくなりそうだからこの組み合わせでindex
+  @@index([resource_type, resource_id, product_id])
+}
+
+//最終仕入れ日とか最終販売日とかはトリガー使ってやるか、その場で別テーブル確認してやるか検討中
+
+
+
+
+
+//パック開封のステータス
+enum PackOpenStatus {
+  DRAFT
+  FINISHED
+  ROLLBACK
+}
+
+//パック開封 Mycaデータベースのパック、POSオリジナルパック用
+//オリパかどうかは、from_productから一対一で正確に辿れるのと、情報として使う予定が今の所ないため、一旦保持する必要なし
+//パック開封の実態は1対多の在庫転送だが、ログとして残さないといけない情報もあるため、テーブル化
+model Pack_Open_History {
+  id                    Int   @db.UnsignedInt()   @id @default(autoincrement())
+  status PackOpenStatus @default(FINISHED) //ステータス
+  from_product_id       Int  @db.UnsignedInt() //パックの在庫ID
+  from_product          Product @relation("fromProduct", fields: [from_product_id], references: [id], onDelete: Cascade)
+  item_count            Int? //開封するパックの数 完了するときは必要
+  item_count_per_pack   Int? //1パックの封入枚数 オリパだと1パックあたりの数が決まっていないためnullも許容
+  unregister_item_count Int @default(0) //未登録の商品数 オリパでは未登録カードが存在しないため0が入る
+  wholesale_price       Int? //1パックあたりの仕入れ値
+  staff_account_id      Int  @db.UnsignedInt()
+  staff_account         Account @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  margin_wholesale_price Int? //余った仕入れ値
+  unregister_product_wholesale_price Int? //未登録の商品の仕入れ値 オリパだとnull
+  unregister_product_id Int?  @db.UnsignedInt() //未登録の商品の在庫先（未指定だとロスとなる）  オリパだとnull
+  unregister_product    Product? @relation("unregisterProduct", fields: [unregister_product_id], references: [id], onDelete: Cascade)
+  created_at            DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at       DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  to_products Pack_Open_Products[]
+}
+
+//パック開封の中身
+//[TODO] 送信した担当者ごとに在庫の区別をつける場合、ここでつける（その時、id要素にstaff_account_idも入ることになる）
+model Pack_Open_Products {
+  pack_open_history_id Int  @db.UnsignedInt()
+  pack_open_history    Pack_Open_History @relation(fields: [pack_open_history_id], references: [id], onDelete: Cascade)
+  product_id           Int  @db.UnsignedInt()
+  product              Product           @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  item_count           Int //商品数
+  wholesale_price      Int? //この商品のパック開封の時の仕入れ額 通常パックの場合は平均値 オリパの場合は精度が高くなるはず 単価
+  staff_account_id      Int  @db.UnsignedInt() //この定義を送信した担当者
+  staff_account         Account @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+
+  @@id([pack_open_history_id, staff_account_id, product_id])
+}
+
+enum SpecialtyKind {
+  NORMAL //通常
+  APPRAISAL //鑑定選択肢
+}
+
+enum SpecialtyHandle {
+  S1_PSA10 //PSA10
+  S50_UNBOXED //未開封
+}
+
+//特殊さを保持する 未開封、PSA10など
+model Specialty {
+  id Int  @db.UnsignedInt() @id @default(autoincrement())
+  store_id Int  @db.UnsignedInt() //どの店舗
+  store Store @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  display_name String /// @zod.string.describe('特殊さの名前')
+  handle SpecialtyHandle? //ハンドル名　システムで特別な意味を持たせるためのカラム ECで特殊状態（鑑定）をマッピングさせるために使う
+  kind SpecialtyKind @default(NORMAL)
+  order_number Int? @db.UnsignedInt() @default(1) //表示順序
+  deleted Boolean @default(false) //削除されたかどうか
+
+  products Product[]
+  appraisal_products Appraisal_Product[]
+  tablet_allowed_genres_categories Tablet_Allowed_Genre_Category[]
+
+  mapping_from Specialty_Mapping[] @relation("fromSpecialty")
+  mapping_to Specialty_Mapping[] @relation("toSpecialty")
+
+  @@unique([store_id, display_name])
+  @@unique([store_id, handle])
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+//店舗間在庫移動用のマッピング
+model Specialty_Mapping {
+  from_store_id Int @db.UnsignedInt()
+  to_store_id Int @db.UnsignedInt()
+  store_relation Store_Relation @relation(fields: [from_store_id, to_store_id], references: [from_store_id, to_store_id], onDelete: Cascade)
+
+  from_specialty_id Int @db.UnsignedInt()
+  from_specialty Specialty @relation("fromSpecialty", fields: [from_specialty_id], references: [id], onDelete: Cascade)
+  to_specialty_id Int @db.UnsignedInt()
+  to_specialty Specialty @relation("toSpecialty", fields: [to_specialty_id], references: [id], onDelete: Cascade)
+
+  @@id([from_specialty_id, to_specialty_id])
+}
+
+//鑑定（PSAなど）
+model Appraisal {
+  id            Int    @db.UnsignedInt()    @id @default(autoincrement())
+  store_id         Int  @db.UnsignedInt() //どの店舗
+  store            Store    @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  shipping_date DateTime @default(dbgenerated("(CURRENT_DATE())")) @db.Date() //発送日
+  appraisal_fee Int @default(0) //鑑定費用
+
+  staff_account_id      Int  @db.UnsignedInt()
+  staff_account         Account @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  finished Boolean  @default(false) @db.UnsignedTinyInt() //終わったかどうか 終わってたらもう結果は入力できない
+  deleted Boolean @default(false) //削除されたかどうか
+
+  shipping_fee Int @default(0) //送料
+  insurance_fee Int @default(0) //保険料
+  handling_fee Int @default(0) //事務手数料
+  other_fee Int @default(0) //その他の費用
+  
+  description String? @db.Text //備考
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+
+  products Appraisal_Product[] //商品定義
+}
+
+//鑑定の商品
+model Appraisal_Product {
+  //同一商品が複数ある場合は別のレコードとして分けないといけないため、IDカラムを設置する
+  id            Int    @db.UnsignedInt()    @id @default(autoincrement())
+  appraisal_id Int  @db.UnsignedInt()
+  appraisal Appraisal @relation(fields: [appraisal_id], references: [id], onDelete: Cascade)
+  product_id Int  @db.UnsignedInt()
+  product Product @relation("originalProduct", fields: [product_id], references: [id], onDelete: Cascade)
+  @@index([appraisal_id, product_id])
+
+  to_product_id Int?  @db.UnsignedInt() //どのproductに変換されたか
+  to_product Product? @relation("toProduct", fields: [to_product_id], references: [id], onDelete: Cascade)
+  sell_price Int? //販売価格（鑑定結果入力時のやつ）
+  condition_option_id Int?  @db.UnsignedInt() //状態のID 単数結びつけられる
+  condition_option Item_Category_Condition_Option? @relation(fields: [condition_option_id], references: [id], onDelete: Cascade)
+  specialty_id Int?  @db.UnsignedInt() //特殊さのID
+  specialty Specialty? @relation(fields: [specialty_id], references: [id], onDelete: Cascade)
+  appraisal_number String? //鑑定番号（管理番号になるやつ）
+  wholesale_price Int //最終的な仕入れ値（鑑定費用を除く）
+  appraisal_fee Int //鑑定費用 1枚あたり 念の為保持する ここに場合によっては他の費用なども含める
+}
+
+
+
+//Productの価格変動　トリガーによって自動挿入される
+enum ProductPriceKind {
+  buy
+  sell
+  ec
+}
+
+model Product_Price {
+  product_id Int  @db.UnsignedInt() //Product.idに対応
+  product    Product         @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  kind       ProductPriceKind //buy | sell | ec
+  date       DateTime        @default(dbgenerated("(CURRENT_DATE())")) @db.Date() //価格の日付
+  price      Int
+
+  @@id([product_id, kind, date])
+}
+
+enum ProductStockHistorySourceKind {
+  product //在庫数を直接変更されたとき 仕入れ値の入力やある程度の権限が必要になってくる
+  transaction_sell //販売取引
+  transaction_buy //買取取引
+  transaction_sell_return //販売の返品
+  transaction_buy_return //買取の返品（必要ないかも）
+  stocking //仕入れ
+  stocking_rollback //仕入れの取り消し
+  loss //ロス登録
+  loss_rollback //ロスの取り消し
+  bundle //バンドル自体の変動があった時に、バンドルの中の商品の変動が起きた時
+  bundle_release //バンドルの解体の時の変動
+  original_pack //オリジナルパックの作成など
+  original_pack_release //オリジナルパックの解体
+  pack_opening //パックを開封した時の移動
+  pack_opening_unregister //パックを開封した時の未登録商品の移動
+  pack_opening_rollback //パックを開封した時の取り消し
+  pack_opening_unregister_rollback //パックを開封した時の未登録商品の取り消し
+  box_opening //ボックスを解体した時の移動
+  box_create //逆にパックからボックスを作った時の移動
+  carton_opening //カートンを解体した時の移動
+  carton_create //カートンを作成した時の移動（カートンマスタの在庫数は増え、ボックスマスタの在庫数は減る）
+  appraisal_create //PSAなどの鑑定の作成時
+  appraisal_return //PSAなどの鑑定の返還時 仕入れ値に鑑定費用が乗ってる
+  appraisal_cancel //PSAなどの鑑定のキャンセル時 仕入れ値に鑑定費用が乗ってない
+  transfer //在庫の転送
+  ec_sell //EC販売（在庫取り置き）
+  ec_sell_return //EC販売返品 なお、欠品やキャンセルなどでも使う（現状発送後のreturnは想定してない）
+  consignment_create //委託作成（預かり）
+  consignment_return //委託返却（削除時のみ）
+  store_shipment //店舗間在庫移動（減る側。増える側はstockingとして入る）
+  store_shipment_rollback //店舗間在庫移動の取り消し
+  location //ロケーションの作成（在庫確保）
+  location_release //ロケーションの解体（残在庫登録）
+}
+
+//Productの在庫変動履歴　手動で挿入する
+model Product_Stock_History {
+  id                  Int       @db.UnsignedInt()                     @id @default(autoincrement())
+  staff_account_id    Int?  @db.UnsignedInt() //担当者
+  staff_account       Account?                      @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  product_id          Int  @db.UnsignedInt() //Product.idに対応
+  product             Product                       @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  source_kind         ProductStockHistorySourceKind //productを直接だったらproduct, 取引だったらtransaction_sell, transaction_buy（返品だったらtransaction_sell_return, transaction_buy_return）, 仕入れだったらstocking, ロスだったらloss, 
+  source_id           Int?  @db.UnsignedInt() //結び付けられているリソースのID product_id, transaction_id, stocking_id, loss_id, bundleのproduct_id パック開封だったらパック開封レコードのID 未指定でもOKにする　在庫変換の場合、変換前在庫の変動だったら変換後在庫のID 変換後在庫の変動だったら変換前在庫のID　ECだったらorderId
+  item_count          Int //変動数、負の数もあり 在庫変換の場合、負の数だったら変換前在庫の変動 正の数だったら変換後在庫の変動
+  unit_price          Int //単価 バンドル商品の中身の場合、0 商品情報を直接書き換えた場合も 0 仕入れの時は仕入れ値
+  description         String? //備考、バンドル商品の中身の商品だったらその旨を記述するなど
+  result_stock_number Int? //結果、ストック数が何になったのか
+  datetime            DateTime                      @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //日時
+
+  inventory_products Inventory_Products[]
+
+  @@index([product_id, source_kind])
+}
+
+
+
+//POSの在庫数が減ったらECの在庫数が減るとは限らない
+//ECの在庫数が減ったら確実にPOSの在庫数も減る
+//ECの在庫数が増えたらPOSの在庫数も増える
+//POSの在庫数が増えたらECの在庫数が増えるとは限らない
+
+enum ProductEcStockHistorySourceKind {
+  //増加
+  mycalinks_ec_sell_return //EC販売返品 なお、欠品やキャンセルなどでも使う（現状発送後のreturnは想定してない）
+  auto_stocking //自動仕入れ（POS側で在庫数が増加した時に自動で仕入れた時のやつ）
+  publish //POSの在庫数を変えずに、POSの在庫の一部をECに出品した時 もしくは最低確保数を変えられて、マージンができてその分出品する時
+
+  //減少
+  recalculate //POS最低在庫数が変更されたりPOSの在庫数が減少したなどでEC在庫数が再計算によって絞られた時
+  mycalinks_ec_sell //Mycalinks EC販売（在庫取り置き）
+  shopify_ec_sell //Shopify EC販売（在庫取り置き）
+  ochanoko_ec_sell //Ochanoko EC販売（在庫取り置き）
+}
+
+//在庫変動履歴のEC版（EC在庫が変わった時に残す）
+model Product_Ec_Stock_History {
+  id                  Int       @db.UnsignedInt()                     @id @default(autoincrement())
+  staff_account_id    Int?  @db.UnsignedInt() //担当者
+  staff_account       Account?                      @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  product_id          Int  @db.UnsignedInt() //Product.idに対応
+  product             Product                       @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  source_kind         ProductEcStockHistorySourceKind //productを直接だったらproduct, 取引だったらtransaction_sell, transaction_buy（返品だったらtransaction_sell_return, transaction_buy_return）, 仕入れだったらstocking, ロスだったらloss, 
+  source_id           Int?  @db.UnsignedInt() //結び付けられているリソースのID product_id, transaction_id, stocking_id, loss_id, bundleのproduct_id パック開封だったらパック開封レコードのID 未指定でもOKにする　在庫変換の場合、変換前在庫の変動だったら変換後在庫のID 変換後在庫の変動だったら変換前在庫のID　ECだったらorderId
+  item_count          Int //変動数、負の数もあり 在庫変換の場合、負の数だったら変換前在庫の変動 正の数だったら変換後在庫の変動
+  unit_price          Int //単価 バンドル商品の中身の場合、0 商品情報を直接書き換えた場合も 0 仕入れの時は仕入れ値
+  description         String? //備考、バンドル商品の中身の商品だったらその旨を記述するなど
+  result_ec_stock_number Int //結果、ストック数が何になったのか
+  datetime            DateTime                      @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //日時
+
+  @@index([product_id, source_kind])
+}
+
+//EC在庫変動を外部システムでキャッチするためのテーブル
+//基本的に処理を行ったらレコードごと削除する想定
+//基本的にSQSなどのキューイングシステムにそのままタスクとして投げる
+//DBトリガーでは入れないことにする
+model Outbox_Ec_Product_Stock_History {
+  id                  Int       @db.UnsignedInt()     @id @default(autoincrement())
+  product_id Int  @db.UnsignedInt() //あえて外部キーは入れない
+  ochanoko_product_id Int? @db.UnsignedInt() //おちゃのこの在庫ID
+  shopify_product_id String? @db.VarChar(50) //Shopifyの商品ID
+  shopify_product_variant_id String? @db.VarChar(50) //Shopifyの商品バリエーションID
+  shopify_inventory_item_id String? @db.VarChar(50) //Shopifyの在庫アイテムID
+  store_id Int @db.UnsignedInt() //ストア
+  item_count Int //変動数
+  source_kind ProductEcStockHistorySourceKind //どのソースから来たか
+  source_id Int? @db.UnsignedInt() //どのソースから来たか
+  result_stock_number Int //結果、ECストック数が何になったのか おちゃのこの場合、ここだけを見る
+  description String? //説明
+
+  //他に外部システム連携に必要な情報なども含めていく
+  created_at   DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+enum LossStatus {
+  FINISHED //完了
+  ROLLBACK //取り消し済
+}
+
+//ロスの登録 //ロス,セールみたいな既存の在庫に追加情報を入れる系のテーブルは一つにまとめようかという案もあるが、一旦分けることに
+model Loss {
+  id               Int      @db.UnsignedInt()       @id @default(autoincrement())
+  store_id         Int  @db.UnsignedInt() //どの店舗のロスか
+  store            Store          @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  datetime         DateTime       @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //ロスの発生日時
+  created_at       DateTime       @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  reason           String?        @db.Text() //ロスの理由
+  total_item_count Int? //合計ロスアイテム数 具体的なアイテムが定義されていない時でもここだけは入力しないといけない
+  total_sell_price Int? //合計の販売価格 念の為
+  status LossStatus @default(FINISHED) //ステータス
+  staff_account_id Int  @db.UnsignedInt()
+  staff_account    Account        @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  loss_genre_id    Int?  @db.UnsignedInt() //ロス区分ID
+  loss_genre       Loss_Genre?    @relation(fields: [loss_genre_id], references: [id], onDelete: Cascade)
+  products         Loss_Product[]
+  // wholesale_prices Product_Wholesale_Price_History[] @relation("lossWholesalePrice")
+}
+
+//ロスの内容
+model Loss_Product {
+  loss_id    Int  @db.UnsignedInt()
+  loss       Loss    @relation(fields: [loss_id], references: [id], onDelete: Cascade)
+  product_id Int  @db.UnsignedInt()
+  product    Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  item_count Int //買取、購入個数
+  sell_price Int? //この時点での販売価格を念の為保持する
+
+  @@id([loss_id, product_id])
+}
+
+//ロス区分
+model Loss_Genre {
+  id           Int    @db.UnsignedInt()   @id @default(autoincrement())
+  store_id     Int  @db.UnsignedInt() //どの店舗のロス区分か
+  store        Store    @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  loss         Loss[] //この区分を参照しているロス
+  // enabled      Boolean  @default(true) @db.UnsignedTinyInt() //有効か無効か
+  // code         Int? //区分コード
+  display_name String? //区分名
+  // order_number Int? //並び順
+  is_deleted   Boolean  @default(false) @db.UnsignedTinyInt() //削除されているかどうか
+  @@index([is_deleted])
+  created_at   DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+//棚卸しのステータス
+enum InventoryStatus {
+  DRAFT //下書き
+  FINISHED //完了
+  //削除した時はステータスが削除になるのではなく、物理削除が実行される感じで
+}
+
+//棚卸し
+model Inventory {
+  id                     Int    @db.UnsignedInt()     @id @default(autoincrement()) /// @zod.number.int().positive().describe("棚卸のID")
+  store_id               Int  @db.UnsignedInt() /// @zod.number.int().positive().describe("店舗のID")
+  store                  Store       @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  
+  item_categories Inventory_Category[] //カテゴリ
+  item_genres Inventory_Genre[] //ジャンル
+
+  total_item_count       Int? /// @zod.number.describe("棚卸の総数（実際の在庫数）")
+  total_item_sell_price  BigInt? /// @zod.bigint.describe("棚卸の合計金額")
+  total_item_wholesale_price BigInt? /// @zod.bigint.describe("棚卸の合計仕入れ金額")
+  total_stock_number     Int? /// @zod.number.describe("合計の在庫数（在庫数の理論値）")
+  total_stock_sell_price BigInt? /// @zod.bigint.describe("合計の販売金額（理論値）")
+  total_stock_wholesale_price BigInt? /// @zod.bigint.describe("合計の仕入れ金額（理論値）")
+  staff_account_id       Int  @db.UnsignedInt() /// @zod.number.describe("担当者のID")
+  staff_account          Account     @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+
+  description String? /// @zod.string.describe("棚卸の説明")
+
+  title String? @db.VarChar(100) /// @zod.string.min(1).max(100).describe("棚卸のタイトル")
+
+  //差異はitemとstockの差を見る感じ
+
+  status InventoryStatus @default(DRAFT) //ステータス
+
+  adjusted  Boolean? @db.UnsignedTinyInt() //ズレていた場合、理論値に調整したかどうか ズレてなかったらそもそもnull
+
+  finished_at DateTime? @db.Timestamp(0) /// @zod.date.describe("終了日")
+
+  products Inventory_Products[]
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe("開始日")
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe("更新日")
+
+
+  //以下、 [category対応廃止予定]
+  department_id          Int?  @db.UnsignedInt() //nullだったら全ての商品（部門なし）ということになる
+  department             Department? @relation(fields: [department_id], references: [id], onDelete: Cascade)
+  item_category_id          Int?  @db.UnsignedInt() //商品種別
+  item_category             Item_Category? @relation(fields: [item_category_id], references: [id], onDelete: Cascade)
+  item_genre_id          Int?  @db.UnsignedInt() //ジャンル
+  item_genre             Item_Genre? @relation(fields: [item_genre_id], references: [id], onDelete: Cascade)
+
+
+}
+
+//棚卸しのカテゴリ定義
+model Inventory_Category {
+  inventory_id Int    @db.UnsignedInt()
+  inventory Inventory   @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
+  item_category_id Int @db.UnsignedInt() /// @zod.number.int().positive().describe("カテゴリのID")
+  item_category Item_Category @relation(fields: [item_category_id], references: [id], onDelete: Cascade)
+  @@id([inventory_id, item_category_id])
+}
+
+//棚卸しのジャンル定義
+model Inventory_Genre {
+  inventory_id Int    @db.UnsignedInt()
+  inventory Inventory   @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
+  item_genre_id Int @db.UnsignedInt() /// @zod.number.int().positive().describe("ジャンルのID")
+  item_genre Item_Genre @relation(fields: [item_genre_id], references: [id], onDelete: Cascade)
+  @@id([inventory_id, item_genre_id])
+}
+
+//棚自体の定義
+model Inventory_Shelf {
+  id           Int    @db.UnsignedInt()  @id @default(autoincrement()) /// @zod.number.int().positive().describe("棚のID")
+  store_id     Int  @db.UnsignedInt() /// @zod.number.int().positive().describe("店舗のID")
+  store        Store   @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  display_name String /// @zod.string.describe("棚自体の名前")
+  is_deleted   Boolean @default(false) @db.UnsignedTinyInt()
+  @@index([is_deleted])
+  order_number Int? /// @zod.number.describe("並び順")
+
+  products Inventory_Products[]
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe("開始日")
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0) /// @zod.date.describe("更新日")
+}
+
+//棚卸しの商品
+//[TODO] どの担当者が送信した在庫なのか見分けがつくようなデータ構造にする
+model Inventory_Products {
+  inventory_id         Int  @db.UnsignedInt() /// @zod.number.int().positive().describe("棚卸のID")
+  inventory            Inventory       @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
+  staff_account_id      Int  @db.UnsignedInt() /// @zod.number.int().positive().describe("この商品を送信した担当者のID")
+  staff_account         Account @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  shelf_id             Int  @db.UnsignedInt() /// @zod.number.int().positive().describe("棚のID")
+  shelf_name           String? /// @zod.string.describe("棚のその時点での名前")
+  shelf                Inventory_Shelf @relation(fields: [shelf_id], references: [id], onDelete: Cascade)
+  product_id           Int  @db.UnsignedInt() /// @zod.number.int().positive().describe("商品のID")
+  product              Product         @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  item_count           Int /// @zod.number.describe("実際に棚にあった個数（他の棚に分散している可能性もあるため、この数=この商品の在庫数とは限らない）")
+  unit_price           Int? /// @zod.number.describe("棚卸を確定した時の販売価格")
+  current_stock_number Int? /// @zod.number.describe("このproduct_idの実際の在庫数")
+
+  input_total_wholesale_price Int? /// @zod.number.describe("棚卸で入力した分の仕入れ値合計")
+
+  wholesale_price_history_id Int? @db.UnsignedInt() /// @zod.number.describe("仕入れ値のID 0→1になった在庫のみ記す")
+  wholesale_price_history Product_Wholesale_Price_History? @relation(fields: [wholesale_price_history_id], references: [id], onDelete: SetNull)
+  product_stock_history_id Int? @db.UnsignedInt() /// @zod.number.describe("在庫調整の時の履歴のID 仕入れ値の注入用")
+  product_stock_history Product_Stock_History? @relation(fields: [product_stock_history_id], references: [id], onDelete: SetNull)
+  wholesale_price_injected Boolean? @db.UnsignedTinyInt() // 仕入れ値を後から注入したかどうか そもそも必要なかったらnull
+
+  //完了時の仕入れ値
+  average_wholesale_price Int? /// @zod.number.describe('平均仕入れ値')
+  minimum_wholesale_price Int? /// @zod.number.describe('最低仕入れ値')
+  maximum_wholesale_price Int? /// @zod.number.describe('最高仕入れ値')
+  total_wholesale_price Int? /// @zod.number.describe('合計仕入れ値')
+
+  @@id([inventory_id, staff_account_id, shelf_id, product_id])
+}
+
+//予約のステータス
+enum ReservationStatus {
+  NOT_STARTED //未開始
+  OPEN //受付中（商品がロックされている状態）
+  CLOSED //受付終了 受け渡しができる状態（商品がロックされている状態）
+  FINISHED //受け渡し完了
+}
+
+
+//お店側で作る予約
+model Reservation {
+  id Int  @db.UnsignedInt() @id @default(autoincrement()) /// @zod.number.describe("予約のID")
+  store_id Int  @db.UnsignedInt() /// @zod.number.describe("店舗のID")
+  store Store @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  product_id Int  @db.UnsignedInt() /// @zod.number.describe("予約対象在庫のID")
+  product Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  status ReservationStatus @default(NOT_STARTED)
+  limit_count Int /// @zod.number.describe("上限数（全体）")
+  limit_count_per_user Int /// @zod.number.describe("上限数（ユーザーごと）")
+  start_at DateTime @db.Date() /// @zod.date.describe("開始日 開始する日の0時を指定")
+  end_at DateTime @db.Date() /// @zod.date.describe("終了日 終了する日の0時を指定")
+  deposit_price Int /// @zod.number.describe("前金")
+  remaining_price Int /// @zod.number.describe("残金（受け取り時お支払い金）")
+
+  receptions Reservation_Reception_Product[] //受付
+  description String? @db.VarChar(300) /// @zod.string.describe("備考")
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+//予約受付 あまり深い意味はない
+model Reservation_Reception {
+  id Int  @db.UnsignedInt() @id @default(autoincrement()) /// @zod.number.describe("受付ID")
+  customer_id Int  @db.UnsignedInt() /// @zod.number.describe("顧客のID")
+  customer Customer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+  staff_account_id Int  @db.UnsignedInt() /// @zod.number.describe("担当者のID")
+  staff_account Account @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  products Reservation_Reception_Product[] //受付で選択した在庫
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //受付日時
+}
+
+enum ReservationReceptionProductStatus {
+  CREATED //前金を払う前
+  DEPOSITED //前金を払った（受付済み 受け取り待ち）
+  RECEIVED //すべて受け取った
+  CANCELLED //キャンセル済 RECEIVEDからCANCELLEDになることはない（返品扱い）
+}
+
+//受付で選択した在庫
+model Reservation_Reception_Product {
+  id Int  @db.UnsignedInt() @id @default(autoincrement()) /// @zod.number.describe("予約票ID")
+  reservation_reception_id Int  @db.UnsignedInt() /// @zod.number.describe("受付のID")
+  reservation_reception Reservation_Reception @relation(fields: [reservation_reception_id], references: [id], onDelete: Cascade)
+  reservation_id Int  @db.UnsignedInt() /// @zod.number.describe("予約のID")
+  reservation Reservation @relation(fields: [reservation_id], references: [id], onDelete: Cascade)
+  //product_idを保持するかは迷う
+  item_count Int /// @zod.number.describe("数")
+  @@unique([reservation_reception_id, reservation_id])
+
+  status ReservationReceptionProductStatus @default(CREATED)
+
+  //二重管理にはなってしまうが、スムーズにリレーションするためにこちらにも顧客IDを入れる
+  customer_id Int @db.UnsignedInt()
+  customer Customer @relation(fields: [customer_id], references: [id], onDelete: Cascade)
+
+  //前金の取引ID（使うかわからんけど一旦追いやすくするため）
+  deposit_transaction_cart Transaction_Cart[] @relation("reservationDepositTransactionCart")
+
+  //受け取りの取引ID
+  received_transaction_cart Transaction_Cart[] @relation("reservationReceivedTransactionCart")
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0) //受付日時
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0) //最後に受け取った日時の可能性が高い
+}
+
+
+
+//委託 [TODO]別ファイルに切り出したい
+
+enum ConsignmentCommissionPaymentMethod {
+  CASH
+  BANK
+}
+
+//委託主
+model Consignment_Client {
+  id Int @db.UnsignedInt() @id @default(autoincrement()) /// @zod.number.describe("委託主のID")
+  store_id Int @db.UnsignedInt() /// @zod.number.describe("店舗のID")
+  store Store @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  full_name String /// @zod.string.describe("委託主の名前")
+  @@unique([store_id, full_name]) //店舗ごとに一意にしておく
+
+  display_name String? /// @zod.string.describe("委託主の表示名")
+
+  zip_code String? /// @zod.string.describe("郵便番号")
+  prefecture String? /// @zod.string.describe("都道府県")
+  city String? /// @zod.string.describe("市区町村")
+  address2 String? /// @zod.string.describe("以降の住所")
+  building String? /// @zod.string.describe("建物名")
+  phone_number String? /// @zod.string.describe("電話番号")
+  fax_number String? /// @zod.string.describe("FAX番号")
+  email String? /// @zod.string.describe("メールアドレス")
+
+  commission_cash_price Int /// @zod.number.describe("手数料（現金）")
+  commission_card_price Int /// @zod.number.describe("手数料（カード）")
+  commission_payment_method ConsignmentCommissionPaymentMethod
+  payment_cycle String? /// @zod.string.describe("支払いサイクル")
+  bank_info_json Json?
+
+  description String? /// @zod.string.describe("備考")
+
+  display_name_on_receipt Boolean @default(false) @db.UnsignedTinyInt() //レシートに委託者名を表示するかどうか
+
+  enabled Boolean @default(true) @db.UnsignedTinyInt() //有効かどうか
+  deleted Boolean @default(false) @db.UnsignedTinyInt() //削除されているかどうか
+
+  products Product[] //この人に結びついている在庫
+  
+  mapping_from Consignment_Client_Mapping[] @relation("fromClient")
+  mapping_to Consignment_Client_Mapping[] @relation("toClient")
+
+  created_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+//委託者のマッピング
+model Consignment_Client_Mapping {
+  from_store_id Int @db.UnsignedInt()
+  to_store_id Int @db.UnsignedInt()
+  store_relation Store_Relation @relation(fields: [from_store_id, to_store_id], references: [from_store_id, to_store_id], onDelete: Cascade)
+
+  from_client_id Int @db.UnsignedInt()
+  from_client Consignment_Client @relation("fromClient", fields: [from_client_id], references: [id], onDelete: Cascade)
+  to_client_id Int @db.UnsignedInt()
+  to_client Consignment_Client @relation("toClient", fields: [to_client_id], references: [id], onDelete: Cascade)
+  @@id([from_client_id, to_client_id])
+}
+
+//ロケーション
+enum LocationStatus {
+  CREATED //作成された状態
+  FINISHED //完了（売り上げ登録）済
+}
+
+model Location {
+  id Int @db.UnsignedInt() @id @default(autoincrement()) /// @zod.number.describe("locationのID")
+  store_id Int @db.UnsignedInt() /// @zod.number.describe("店舗のID")
+  store Store @relation(fields: [store_id], references: [id], onDelete: Cascade)
+  staff_account_id Int @db.UnsignedInt() /// @zod.number.describe("担当者のID")
+  staff_account Account @relation(fields: [staff_account_id], references: [id], onDelete: Cascade)
+  display_name String /// @zod.string.describe("locationの表示名")
+  expected_sales Int? /// @zod.number.describe("見込みの売上")
+  actual_sales Int? /// @zod.number.describe("実際の売上 完了時に入力")
+  //上二つの値で粗利などを求める
+  total_wholesale_price Int? /// @zod.number.describe("合計の仕入れ値")
+  actual_wholesale_price Int? /// @zod.number.describe("実際の仕入れ値 完了後にわかる")
+  total_item_count Int? /// @zod.number.describe("合計数")
+  actual_item_count Int? /// @zod.number.describe("実際の販売数 完了後にわかる")
+  description String? /// @zod.string.describe("備考")
+  status LocationStatus @default(CREATED)
+  finished_at DateTime? @db.Timestamp(0) /// @zod.date.describe("終了日 解体日時")
+  products Location_Product[] //在庫定義
+
+  created_at            DateTime           @default(dbgenerated("CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+  updated_at DateTime @default(dbgenerated("CURRENT_TIMESTAMP() ON UPDATE CURRENT_TIMESTAMP()")) @db.Timestamp(0)
+}
+
+//ロケーションの在庫定義
+model Location_Product {
+  location_id Int @db.UnsignedInt()
+  location Location @relation(fields: [location_id], references: [id], onDelete: Cascade)
+  product_id Int @db.UnsignedInt()
+  product Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  @@id([location_id, product_id])
+
+  item_count Int /// @zod.number.describe("数")
+}

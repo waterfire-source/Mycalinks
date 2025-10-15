@@ -1,0 +1,473 @@
+Parameters:
+  App:
+    Type: String
+  Env:
+    Type: String
+
+# 条件定義
+Conditions:
+  # ステージングと本番環境のみ
+  IsAllowedEnvironment: !Or
+    - !Equals [!Ref Env, 'staging']
+    - !Equals [!Ref Env, 'production']
+  IsStaging: !Equals [!Ref Env, 'staging']
+  IsProduction: !Equals [!Ref Env, 'production']
+
+Mappings:
+  InstanceSetting:
+    staging:
+      type: db.r8g.large
+    production:
+      type: db.r8g.xlarge
+      replicaType: db.r7g.large
+    common:
+      engineVersion: 8.0.mysql_aurora.3.09.0
+      family: aurora-mysql8.0
+
+  ProxySetting:
+    staging:
+      secretArn: arn:aws:secretsmanager:ap-northeast-1:502078855105:secret:pos/staging/db-d8nvC9
+    production:
+      secretArn: arn:aws:secretsmanager:ap-northeast-1:502078855105:secret:myca/production/rds-v0DnGW
+
+Resources:
+  SG:
+    Condition: IsAllowedEnvironment
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'RDS security group for ${Env} environment'
+      VpcId: !ImportValue
+        Fn::Sub: '${App}-${Env}-VpcId'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.0.0.0/16
+
+  SubnetGroup:
+    Condition: IsAllowedEnvironment
+    UpdateReplacePolicy: Retain
+    Type: AWS::RDS::DBSubnetGroup
+    DeletionPolicy: Retain
+    Properties:
+      DBSubnetGroupDescription: Created from the RDS Management Console
+      SubnetIds:
+        !Split [',', { Fn::ImportValue: !Sub '${App}-${Env}-PrivateSubnets' }]
+      DBSubnetGroupName: !Sub '${App}-${Env}-subnet-group'
+
+  DBCluster:
+    Condition: IsAllowedEnvironment
+    Type: AWS::RDS::DBCluster
+    Properties:
+      Engine: aurora-mysql
+      EngineVersion: !FindInMap [InstanceSetting, common, engineVersion]
+      DBClusterParameterGroupName: !If
+        - IsStaging
+        - !Ref StagingClusterParameterGroup
+        - !Ref ProductionClusterParameterGroup
+      DBSubnetGroupName: !Ref SubnetGroup
+      MasterUsername: !If
+        - IsStaging
+        - '{{resolve:secretsmanager:arn:aws:secretsmanager:ap-northeast-1:502078855105:secret:myca/db/production-bR8tr5:SecretString:USERNAME}}'
+        - '{{resolve:secretsmanager:arn:aws:secretsmanager:ap-northeast-1:502078855105:secret:myca/db/production-bR8tr5:SecretString:USERNAME}}'
+      MasterUserPassword: !If
+        - IsStaging
+        - '{{resolve:secretsmanager:arn:aws:secretsmanager:ap-northeast-1:502078855105:secret:myca/db/production-bR8tr5:SecretString:PASSWORD}}'
+        - '{{resolve:secretsmanager:arn:aws:secretsmanager:ap-northeast-1:502078855105:secret:myca/db/production-bR8tr5:SecretString:PASSWORD}}'
+      VpcSecurityGroupIds:
+        - !Ref SG
+      BackupRetentionPeriod: !If
+        - IsStaging
+        - 7
+        - 30
+      DBClusterIdentifier: !Sub '${App}-${Env}-cluster'
+      AutoMinorVersionUpgrade: true
+      DeletionProtection: true
+      Port: '3306'
+      PreferredBackupWindow: 18:59-19:29
+      PreferredMaintenanceWindow: sun:16:51-sun:17:21
+      NetworkType: IPV4
+      StorageType: aurora
+      PerformanceInsightsEnabled: true
+      PerformanceInsightsRetentionPeriod: 465
+      MonitoringInterval: 60
+      MonitoringRoleArn: !GetAtt RDSMonitoringRole.Arn
+      DatabaseInsightsMode: advanced
+      EnableCloudwatchLogsExports:
+        - slowquery
+        - general
+        - audit
+        - error
+
+  DBWriter:
+    Condition: IsAllowedEnvironment
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AvailabilityZone: ap-northeast-1a
+      PromotionTier: 1
+      Engine: aurora-mysql
+      DBInstanceClass: !FindInMap [InstanceSetting, !Ref Env, type]
+      DBClusterIdentifier: !Ref DBCluster
+      DBParameterGroupName: !If
+        - IsStaging
+        - !Ref StagingInstanceParameterGroup
+        - !Ref ProductionInstanceParameterGroup
+      PubliclyAccessible: false
+      DBInstanceIdentifier: !Sub '${App}-${Env}-instance1'
+
+  DBReader:
+    Condition: IsProduction
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AvailabilityZone: ap-northeast-1c
+      PromotionTier: 5
+      Engine: aurora-mysql
+      DBInstanceClass: !FindInMap [InstanceSetting, !Ref Env, replicaType]
+      DBClusterIdentifier: !Ref DBCluster
+      DBParameterGroupName: !If
+        - IsStaging
+        - !Ref StagingInstanceParameterGroup
+        - !Ref ProductionInstanceParameterGroup
+      PubliclyAccessible: false
+      DBInstanceIdentifier: !Sub '${App}-${Env}-instance2'
+
+  DBReader2:
+    Condition: IsProduction
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AvailabilityZone: ap-northeast-1c
+      PromotionTier: 5
+      Engine: aurora-mysql
+      DBInstanceClass: !FindInMap [InstanceSetting, !Ref Env, replicaType]
+      DBClusterIdentifier: !Ref DBCluster
+      DBParameterGroupName: !If
+        - IsStaging
+        - !Ref StagingInstanceParameterGroup
+        - !Ref ProductionInstanceParameterGroup
+      PubliclyAccessible: false
+      DBInstanceIdentifier: !Sub '${App}-${Env}-instance3'
+
+  # 一旦オーバースペックだったためReader2を削除
+  # DBReader2:
+  #   Condition: IsProduction
+  #   Type: AWS::RDS::DBInstance
+  #   Properties:
+  #     AvailabilityZone: ap-northeast-1c
+  #     PromotionTier: 5
+  #     Engine: aurora-mysql
+  #     DBInstanceClass: !FindInMap [InstanceSetting, !Ref Env, replicaType]
+  #     DBClusterIdentifier: !Ref DBCluster
+  #     DBParameterGroupName: !If
+  #       - IsStaging
+  #       - !Ref StagingInstanceParameterGroup
+  #       - !Ref ProductionInstanceParameterGroup
+  #     PubliclyAccessible: false
+  #     DBInstanceIdentifier: !Sub '${App}-${Env}-instance3'
+
+  # 本番だけリーダーをオートスケーリングさせる
+  ScalableTarget:
+    Condition: IsProduction
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: 3
+      MinCapacity: 1
+      RoleARN:
+        Fn::Sub: 'arn:aws:iam::${AWS::AccountId}:role/aws-service-role/rds.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_RDSCluster'
+      ServiceNamespace: rds
+      ScalableDimension: 'rds:cluster:ReadReplicaCount'
+      ResourceId: !Sub cluster:${DBCluster}
+  ScalingPolicyDBCluster:
+    Condition: IsProduction
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub ${DBCluster}-asg
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 80
+        PredefinedMetricSpecification:
+          PredefinedMetricType: RDSReaderAverageCPUUtilization
+        ScaleInCooldown: 600
+        ScaleOutCooldown: 300
+
+  RDSDBProxyRole:
+    Condition: IsAllowedEnvironment
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - 'rds.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Description: 'RDS DB Proxy Role'
+      Policies:
+        - PolicyName: 'AdditionalPermissions'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'secretsmanager:GetResourcePolicy'
+                  - 'secretsmanager:GetSecretValue'
+                  - 'secretsmanager:DescribeSecret'
+                  - 'secretsmanager:ListSecretVersionIds'
+                Resource: '*'
+      RoleName: !Sub '${App}-${Env}-rds-proxy-role'
+
+  DBProxy:
+    Condition: IsAllowedEnvironment
+    Type: AWS::RDS::DBProxy
+    Properties:
+      DBProxyName: !Sub '${App}-${Env}-proxy'
+      IdleClientTimeout: 3600
+      EngineFamily: MYSQL
+      RoleArn: !GetAtt RDSDBProxyRole.Arn
+      VpcSecurityGroupIds:
+        - !Ref SG
+      Auth:
+        - AuthScheme: SECRETS
+          SecretArn: !FindInMap [ProxySetting, !Ref Env, secretArn]
+          IAMAuth: DISABLED
+          ClientPasswordAuthType: MYSQL_NATIVE_PASSWORD
+      VpcSubnetIds:
+        !Split [',', { Fn::ImportValue: !Sub '${App}-${Env}-PrivateSubnets' }]
+
+  ProxyTargetGroup:
+    Condition: IsAllowedEnvironment
+    Type: AWS::RDS::DBProxyTargetGroup
+    Properties:
+      DBProxyName: !Ref DBProxy
+      TargetGroupName: default
+      ConnectionPoolConfigurationInfo:
+        MaxConnectionsPercent: 80
+      DBClusterIdentifiers:
+        - !Ref DBCluster
+
+  ProxyReaderEndpoint:
+    Condition: IsAllowedEnvironment
+    Type: AWS::RDS::DBProxyEndpoint
+    Properties:
+      DBProxyEndpointName: !Sub '${App}-${Env}-proxy-reader'
+      DBProxyName: !Ref DBProxy
+      TargetRole: READ_ONLY
+      VpcSecurityGroupIds:
+        - !Ref SG
+      VpcSubnetIds:
+        !Split [',', { Fn::ImportValue: !Sub '${App}-${Env}-PrivateSubnets' }]
+
+  RDSMonitoringRole:
+    Condition: IsAllowedEnvironment
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${App}-${Env}-RDSMonitoringRole
+      Path: /service-role/
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: monitoring.rds.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+
+  ProductionEndpointRecord:
+    Condition: IsProduction
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: mycalinks.io. # ← 最後の . を忘れない
+      Name: db.pos.mycalinks.io. # ← 登録するサブドメイン
+      Type: CNAME
+      TTL: 300
+      ResourceRecords:
+        - !GetAtt DBProxy.Endpoint
+
+  ProductionReaderEndpointRecord:
+    Condition: IsProduction
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: mycalinks.io. # ← 最後の . を忘れない
+      Name: db-rep.pos.mycalinks.io. # ← 登録するサブドメイン
+      Type: CNAME
+      TTL: 300
+      ResourceRecords:
+        - !GetAtt ProxyReaderEndpoint.Endpoint
+
+  StagingEndpointRecord:
+    Condition: IsStaging
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: mycalinks.io. # ← 最後の . を忘れない
+      Name: staging.db.pos.mycalinks.io. # ← 登録するサブドメイン
+      Type: CNAME
+      TTL: 300
+      ResourceRecords:
+        - !GetAtt DBProxy.Endpoint
+
+  StagingInstanceParameterGroup:
+    Condition: IsStaging
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: Custom parameter group for Aurora MySQL 8.0
+      Family: !FindInMap [InstanceSetting, common, family]
+      Parameters:
+        cte_max_recursion_depth: 10000
+      Tags:
+        - Key: Name
+          Value: !Sub '${App}-${Env}-aurora-mysql-8-instance'
+
+  ProductionInstanceParameterGroup:
+    Condition: IsProduction
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: Custom parameter group for Aurora MySQL 8.0
+      Family: !FindInMap [InstanceSetting, common, family]
+      Parameters:
+        cte_max_recursion_depth: 10000
+      Tags:
+        - Key: Name
+          Value: !Sub '${App}-${Env}-aurora-mysql-8-instance'
+
+  StagingClusterParameterGroup:
+    Condition: IsStaging
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      DBClusterParameterGroupName: !Sub '${App}-${Env}-aurora-mysql-8-cluster'
+      Description: Custom parameter group for Aurora MySQL 8.0
+      Family: !FindInMap [InstanceSetting, common, family]
+      Parameters:
+        collation_connection: utf8mb4_unicode_ci
+        collation_server: utf8mb4_unicode_ci
+        character_set_client: utf8mb4
+        character_set_connection: utf8mb4
+        character_set_filesystem: utf8mb4
+        character_set_results: utf8mb4
+        character_set_server: utf8mb4
+        init_connect: 'SET collation_connection=utf8mb4_unicode_ci'
+        time_zone: Asia/Tokyo
+        max_heap_table_size: 16777216
+        tmp_table_size: 16777216
+        max_allowed_packet: 1000000000
+        innodb_sort_buffer_size: 2097152
+        join_buffer_size: 524288
+        read_buffer_size: 524288
+        table_open_cache: 8000
+        slow_query_log: 1
+        long_query_time: 10
+        log_output: FILE
+        innodb_flush_log_at_trx_commit: 0
+        innodb_trx_commit_allow_data_loss: 1
+        ngram_token_size: 2
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${App}-${Env}-aurora-mysql-8-cluster'
+
+  ProductionClusterParameterGroup:
+    Condition: IsProduction
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      DBClusterParameterGroupName: !Sub '${App}-${Env}-aurora-mysql-8-cluster'
+      Description: Custom parameter group for Aurora MySQL 8.0
+      Family: !FindInMap [InstanceSetting, common, family]
+      Parameters:
+        collation_connection: utf8mb4_unicode_ci
+        collation_server: utf8mb4_unicode_ci
+        character_set_client: utf8mb4
+        character_set_connection: utf8mb4
+        character_set_filesystem: utf8mb4
+        character_set_results: utf8mb4
+        character_set_server: utf8mb4
+        init_connect: 'SET collation_connection=utf8mb4_unicode_ci'
+        time_zone: Asia/Tokyo
+        max_heap_table_size: 16777216
+        tmp_table_size: 16777216
+        max_allowed_packet: 1000000000
+        innodb_sort_buffer_size: 2097152
+        join_buffer_size: 524288
+        read_buffer_size: 524288
+        table_open_cache: 8000
+        slow_query_log: 1
+        long_query_time: 10
+        log_output: FILE
+        ngram_token_size: 2
+
+      Tags:
+        - Key: Name
+          Value: !Sub '${App}-${Env}-aurora-mysql-8-cluster'
+
+  # 以下、watch
+  # アラーム①：CPU使用率が80%以上
+  # DBCpuHighAlarm:
+  #   Condition: IsProduction
+  #   Type: AWS::CloudWatch::Alarm
+  #   Properties:
+  #     AlarmName: !Sub '${App}-${Env}-db-cpu-high'
+  #     Namespace: AWS/RDS
+  #     MetricName: CPUUtilization
+  #     Dimensions:
+  #       - Name: DBInstanceIdentifier
+  #         Value: !Ref RDSDBInstance
+  #     Statistic: Average
+  #     Period: 60
+  #     EvaluationPeriods: 3
+  #     Threshold: 80
+  #     ComparisonOperator: GreaterThanThreshold
+  #     AlarmActions:
+  #       - !ImportValue
+  #         Fn::Sub: '${App}-${Env}-slack-infra-alert-topic-arn'
+  #     TreatMissingData: notBreaching
+
+  # DBReadReplicaCpuHighAlarm:
+  #   Condition: IsProduction
+  #   Type: AWS::CloudWatch::Alarm
+  #   Properties:
+  #     AlarmName: !Sub '${App}-${Env}-db-read-replica-cpu-high'
+  #     Namespace: AWS/RDS
+  #     MetricName: CPUUtilization
+  #     Dimensions:
+  #       - Name: DBInstanceIdentifier
+  #         Value: !Ref RDSReadReplica
+  #     Statistic: Average
+  #     Period: 60
+  #     EvaluationPeriods: 3
+  #     Threshold: 80
+  #     ComparisonOperator: GreaterThanThreshold
+  #     AlarmActions:
+  #       - !ImportValue
+  #         Fn::Sub: '${App}-${Env}-slack-infra-alert-topic-arn'
+  #     TreatMissingData: notBreaching
+
+  # # アラーム②：レプリケーションエラー
+  # ReplicaErrorAlarm:
+  #   Condition: IsProduction
+  #   Type: AWS::CloudWatch::Alarm
+  #   Properties:
+  #     AlarmName: !Sub '${App}-${Env}-db-replica-error'
+  #     AlarmDescription: 'リードレプリカでエラーが発生しました'
+  #     MetricName: ReplicationState
+  #     Namespace: AWS/RDS
+  #     Statistic: Maximum
+  #     Period: 300
+  #     EvaluationPeriods: 1
+  #     Threshold: 0 # 0 = エラー状態
+  #     ComparisonOperator: LessThanThreshold
+  #     TreatMissingData: breaching
+  #     Dimensions:
+  #       - Name: DBInstanceIdentifier
+  #         Value: !Ref RDSReadReplica
+  #     AlarmActions:
+  #       - !ImportValue
+  #         Fn::Sub: '${App}-${Env}-slack-infra-alert-topic-arn'
+# Outputs:
+# DBInstanceIdentifier:
+#   Condition: IsAllowedEnvironment
+#   Value: !Ref RDSDBInstance
+#   Export:
+#     Name: !Sub '${App}-${Env}-DBInstanceIdentifier'

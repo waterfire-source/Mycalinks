@@ -1,0 +1,13 @@
+{
+  "extends": "tsconfig/main",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    { "path": "../../packages/backend-core" },
+    { "path": "../../packages/common" }
+  ]
+}

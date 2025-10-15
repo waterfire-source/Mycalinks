@@ -1,0 +1,38 @@
+{
+  "extends": "tsconfig/main",
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "types": ["@types/react", "@types/react-dom"],
+    "allowJs": true,
+    "strict": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@api-defs/*": ["../../packages/api-generator/src/defs/*"]
+    },
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "**/modules/brother/bpac.js"
+  ],
+  "exclude": ["node_modules"],
+  "references": [
+    { "path": "../../packages/backend-core" },
+    { "path": "../../packages/common" },
+    { "path": "../../packages/api-generator" }
+  ]
+}

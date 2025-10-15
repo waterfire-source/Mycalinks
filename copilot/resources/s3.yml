@@ -1,0 +1,41 @@
+# [TODO] 現状CloudFormationでスタック管理できているわけではないため、これもおいおいcopilotに移行したい
+
+Metadata:
+  AWSToolsMetrics:
+    IaC_Generator: arn:aws:cloudformation:ap-northeast-1:502078855105:generatedTemplate/88691fa1-bdc4-449b-97fb-9360cb43f77d
+Resources:
+  S3BucketPolicyStaticmycalinksio:
+    UpdateReplacePolicy: Retain
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    Properties:
+      Bucket: !Ref S3BucketStaticmycalinksio
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Resource: arn:aws:s3:::static.mycalinks.io/*
+            Action: s3:GetObject
+            Effect: Allow
+            Principal: '*'
+            Sid: Statement1
+  S3BucketStaticmycalinksio:
+    UpdateReplacePolicy: Retain
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: index.html
+      PublicAccessBlockConfiguration:
+        RestrictPublicBuckets: false
+        IgnorePublicAcls: false
+        BlockPublicPolicy: false
+        BlockPublicAcls: false
+      BucketName: static.mycalinks.io
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: false
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256

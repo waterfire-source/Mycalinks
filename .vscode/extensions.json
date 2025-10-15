@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "rvest.vs-code-prettier-eslint",
+    "esbenp.prettier-vscode",
+    "streetsidesoftware.code-spell-checker",
+    "formulahendry.auto-close-tag",
+    "formulahendry.auto-rename-tag",
+    "ChakrounAnas.turbo-console-log",
+  ]
+}

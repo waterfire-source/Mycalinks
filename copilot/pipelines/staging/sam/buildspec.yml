@@ -1,0 +1,29 @@
+# sam関連
+version: 0.2
+env:
+  variables:
+    NODE_OPTIONS: '--max-old-space-size=4096'
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 22
+      python: 3.12
+    commands:
+      - npm i -g pnpm
+      - pip install aws-sam-cli
+      - cp ./prod.npmrc ./.npmrc
+  build:
+    commands:
+      - pnpm i --frozen-lockfile
+      - pnpm sam:build
+  post_build:
+    commands:
+      # メールのやつ
+      - pnpm --filter function-email-webhook deploy:staging
+
+      # Shopifyのやつ
+      - pnpm --filter function-shopify-webhook deploy:staging
+
+      # Pythonのやつ
+      - pnpm --filter function-python-api deploy:staging

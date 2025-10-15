@@ -1,0 +1,38 @@
+name: Run API Integration Test
+
+on:
+  pull_request:
+    branches:
+      - develop # developブランチへのPRを立てたときにテストを実行
+      - staging
+      - production
+
+jobs:
+  api-integration-test:
+    runs-on: myca-pos-actions-runner
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '23'
+
+      - name: install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y openssl
+
+      - name: install pnpm
+        run: npm i -g pnpm
+      - name: install dependencies
+        run: pnpm i --frozen-lockfile
+      - name: prisma-generate
+        run: pnpm run prisma:generate
+      - name: backend-core
+        run: pnpm run build:backend-core
+      - name: common
+        run: pnpm run build:common
+      - name: api-generator
+        run: pnpm api:generate
+      - name: Run API Integration Test (internal)
+        run: pnpm run test:integ:api:internal

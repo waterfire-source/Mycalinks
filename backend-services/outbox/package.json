@@ -1,0 +1,29 @@
+{
+  "name": "backend-service-outbox",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "npx tsc",
+    "dev:start": "dotenv -e ../../envs/.env.local node dist/index.js",
+    "staging:start": "dotenv -e ../../envs/.env.stg node dist/index.js",
+    "prod:start": "dotenv -e ../../envs/.env.prod node dist/index.js",
+    "customer-prod:start": "dotenv -e ../../envs/.env.customer-prod node dist/index.js",
+    "public-prod:start": "dotenv -e ../../envs/.env.public-prod node dist/index.js",
+    "tmp:start": "dotenv -e ../../envs/.env.tmp node dist/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "dotenv": "^16.4.7",
+    "dotenv-cli": "^7.4.2",
+    "typescript": "^5.8.3",
+    "tsconfig": "workspace:*"
+  },
+  "dependencies": {
+    "common": "workspace:*",
+    "backend-core": "workspace:*",
+    "@prisma/client": "^6.6.0",
+    "prisma": "^6.6.0"
+  }
+}

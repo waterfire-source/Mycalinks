@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "ES2022",
+    "moduleResolution": "NodeNext",
+    "module": "NodeNext",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  }
+}
