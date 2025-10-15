@@ -1,3 +1,0 @@
-- op: replace
-  path: /Resources/BuildProject/Properties/Environment/ComputeType
-  value: BUILD_GENERAL1_MEDIUM

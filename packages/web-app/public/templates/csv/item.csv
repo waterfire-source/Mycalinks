@@ -1,7 +1,0 @@
-商品マスタ用テンプレート,,,,,,,,,,,,,,,,,,,,,
-商品マスタID,Mycaアプリ上でのID,商品名,商品名カナ,エキスパンション,カード番号,レアリティ,封入パック,キーワード,JANコード,表示順,ジャンル,カテゴリ,販売店舗価格,買取価格,買取専用,自動印刷,店舗タブレット表示,在庫数無限商品,端数処理を無効にする,商品一覧に表示しない,アップロードエラー
-ハンドル名,（この部分は変更しないでください）,,,,,,,,,,,,,,,,,,,,
-id,myca_item_id,display_name,display_name_ruby,expansion,cardnumber,rarity,pack_name,keyword,readonly_product_code,order_number,genre_display_name,category_display_name,sell_price,buy_price,is_buy_only,allow_auto_print_label,tablet_allowed,infinite_stock,disallow_round,hidden,upload_error
-この下の行からデータ開始,（この下からデータを記入してください）,,,,,,,,,,,,,,,,,,,,
-,439000000,バトスピ名前変えたやつ,,,,,,,,,,,,,,,,,,,
-,439000005,,,,,,,,,,,,,,,,,,,,

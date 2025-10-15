@@ -1,2 +1,0 @@
-pnpm run prisma:generate
-echo 'チェックアウトされたためPrismaの型を生成し直しました'

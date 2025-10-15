@@ -1,9 +1,0 @@
-npx lint-staged
-
-commit_msg=$(cat "$1" 2>/dev/null || git log -1 --pretty=%B)
-if echo "$commit_msg" | grep -i "wip" > /dev/null; then
-  echo "WIPコミットが検出されました。lintチェックをスキップします。"
-  exit 0
-fi
-
-pnpm lint:web-app --quiet

@@ -1,7 +1,0 @@
-query test {
-  currentAppInstallation {
-    accessScopes {
-      handle
-    }
-  }
-}

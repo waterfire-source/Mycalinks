@@ -1,9 +1,0 @@
-# [TODO] アプリ系はappsにしたい
-packages:
-  - packages/*
-  - jobs/*
-  - apps/*
-  - backend-services/*
-  - workers/*
-  - functions/*
-  - configs/*
